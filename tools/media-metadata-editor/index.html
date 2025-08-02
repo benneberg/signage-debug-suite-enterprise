@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Media Metadata Editor</title>
+    <style>
+        body { font-family: sans-serif; padding: 20px; background-color: var(--bg-color); color: var(--text-color); }
+        h2 { color: var(--text-color); margin-bottom: 15px; }
+        p { margin-bottom: 10px; }
+        input[type="file"] { margin-bottom: 15px; border: 1px solid var(--border-color); background-color: var(--input-bg); color: var(--text-color); padding: 8px; border-radius: 5px; }
+        .metadata-display { margin-top: 20px; padding: 15px; border: 1px solid var(--border-color); background-color: var(--input-bg); border-radius: 5px; min-height: 150px; white-space: pre-wrap; font-family: monospace; }
+        .error-message { color: #e06c75; margin-top: 10px; }
+    </style>
+</head>
+<body>
+    <h2>Media Metadata Editor</h2>
+    <p>Upload a media file (.mp4, .jpg, .webp) to view its metadata.</p>
+    <input type="file" id="media-file-input" accept="video/*,image/*">
+    <div class="metadata-display" id="metadata-output">
+        Metadata will appear here.
+    </div>
+    <div class="error-message" id="error-message"></div>
+
+    <script>
+        const fileInput = document.getElementById('media-file-input');
+        const metadataOutput = document.getElementById('metadata-output');
+        const errorMessage = document.getElementById('error-message');
+        let currentToolId = '';
+
+        function saveState() {
+            if (currentToolId) {
+                const state = {
+                    metadataContent: metadataOutput.innerHTML,
+                    errorContent: errorMessage.innerHTML
+                };
+                localStorage.setItem(`tool-state-${currentToolId}`, JSON.stringify(state));
+            }
+        }
+
+        function loadState() {
+            if (currentToolId) {
+                const savedState = localStorage.getItem(`tool-state-${currentToolId}`);
+                if (savedState) {
+                    const state = JSON.parse(savedState);
+                    metadataOutput.innerHTML = state.metadataContent || 'Metadata will appear here.';
+                    errorMessage.innerHTML = state.errorContent || '';
+                }
+            }
+        }
+
+        fileInput.addEventListener('change', async (event) => {
+            const file = event.target.files[0];
+            if (!file) {
+                metadataOutput.textContent = 'No file selected.';
+                errorMessage.textContent = '';
+                saveState();
+                return;
+            }
+
+            metadataOutput.textContent = 'Analyzing metadata...';
+            errorMessage.textContent = '';
+
+            try {
+                if (file.type.startsWith('image/')) {
+                    await analyzeImageMetadata(file);
+                } else if (file.type.startsWith('video/')) {
+                    await analyzeVideoMetadata(file);
+                } else {
+                    throw new Error('Unsupported file type. Please select an image or video.');
+                }
+            } catch (error) {
+                metadataOutput.textContent = 'Failed to extract metadata.';
+                errorMessage.textContent = `Error: ${error.message}`;
+                console.error('Metadata analysis error:', error);
+            } finally {
+                saveState(); // Save state after analysis attempt
+            }
+        });
+
+        async function analyzeImageMetadata(file) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    const img = new Image();
+                    img.onload = () => {
+                        const metadata = {
+                            name: file.name,
+                            type: file.type,
+                            size: `${(file.size / 1024).toFixed(2)} KB`,
+                            dimensions: `${img.width}x${img.height} pixels`,
+                            lastModified: new Date(file.lastModified).toLocaleString()
+                        };
+                        metadataOutput.textContent = JSON.stringify(metadata, null, 2);
+                        resolve();
+                    };
+                    img.onerror = (err) => reject(new Error('Could not load image.'));
+                    img.src = e.target.result;
+                };
+                reader.onerror = (err) => reject(new Error('Could not read file.'));
+                reader.readAsDataURL(file);
+            });
+        }
+
+        async function analyzeVideoMetadata(file) {
+            return new Promise((resolve, reject) => {
+                const video = document.createElement('video');
+                video.preload = 'metadata';
+                video.onloadedmetadata = () => {
+                    const metadata = {
+                        name: file.name,
+                        type: file.type,
+                        size: `${(file.size / 1024).toFixed(2)} KB`,
+                        duration: `${video.duration.toFixed(2)} seconds`,
+                        dimensions: `${video.videoWidth}x${video.videoHeight} pixels`,
+                        lastModified: new Date(file.lastModified).toLocaleString()
+                        // Note: Codec info is harder to get directly from HTML5 video element
+                    };
+                    metadataOutput.textContent = JSON.stringify(metadata, null, 2);
+                    URL.revokeObjectURL(video.src);
+                    resolve();
+                };
+                video.onerror = (err) => reject(new Error('Could not load video metadata.'));
+                video.src = URL.createObjectURL(file);
+            });
+        }
+
+        // Apply theme and receive toolId from parent
+        window.addEventListener('message', (event) => {
+            if (event.data.type === 'themeChange') {
+                document.documentElement.setAttribute('data-theme', event.data.theme);
+            } else if (event.data.type === 'toolId') {
+                currentToolId = event.data.toolId;
+                loadState(); // Load state once toolId is received
+            }
+        });
+        // Request initial theme and toolId on load
+        window.parent.postMessage({ type: 'requestTheme' }, '*');
+        window.parent.postMessage({ type: 'requestToolId' }, '*');
+    </script>
+</body>
+</html>

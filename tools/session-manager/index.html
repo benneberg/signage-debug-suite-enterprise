@@ -1,0 +1,954 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Session Manager & Collaboration</title>
+    <style>
+        body { font-family: sans-serif; padding: 20px; background-color: var(--bg-color); color: var(--text-color); margin: 0; }
+        h2 { color: var(--text-color); margin-bottom: 15px; }
+        .session-layout { display: grid; grid-template-columns: 300px 1fr 250px; gap: 20px; height: calc(100vh - 100px); }
+        .sidebar { background-color: var(--input-bg); border: 1px solid var(--border-color); border-radius: 8px; padding: 16px; overflow-y: auto; }
+        .main-panel { background-color: var(--input-bg); border: 1px solid var(--border-color); border-radius: 8px; padding: 16px; overflow-y: auto; }
+        .collaboration-panel { background-color: var(--input-bg); border: 1px solid var(--border-color); border-radius: 8px; padding: 16px; overflow-y: auto; }
+        .section { margin-bottom: 24px; }
+        .section h3 { margin-bottom: 12px; font-size: 1.1em; color: var(--text-color); }
+        .session-item { padding: 12px; margin-bottom: 8px; border: 1px solid var(--border-color); border-radius: 6px; cursor: pointer; transition: all 0.2s; }
+        .session-item:hover { background-color: rgba(97, 175, 239, 0.1); }
+        .session-item.active { background-color: rgba(97, 175, 239, 0.2); border-color: #61afef; }
+        .session-name { font-weight: bold; margin-bottom: 4px; }
+        .session-info { font-size: 0.9em; opacity: 0.8; }
+        .session-status { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 0.8em; font-weight: bold; margin-top: 4px; }
+        .status-active { background-color: #98c379; color: white; }
+        .status-paused { background-color: #e5c07b; color: black; }
+        .status-completed { background-color: #56b6c2; color: white; }
+        .btn { padding: 8px 16px; border: 1px solid var(--border-color); background-color: var(--button-bg); color: var(--button-text); border-radius: 5px; cursor: pointer; margin-right: 8px; margin-bottom: 8px; }
+        .btn:hover { opacity: 0.8; }
+        .btn-primary { background-color: #61afef; color: white; border-color: #61afef; }
+        .btn-success { background-color: #98c379; color: white; border-color: #98c379; }
+        .btn-warning { background-color: #e5c07b; color: black; border-color: #e5c07b; }
+        .btn-danger { background-color: #e06c75; color: white; border-color: #e06c75; }
+        .form-group { margin-bottom: 16px; }
+        .form-group label { display: block; margin-bottom: 4px; font-weight: bold; }
+        .form-group input, .form-group textarea, .form-group select { width: 100%; padding: 8px; border: 1px solid var(--border-color); border-radius: 4px; background-color: var(--bg-color); color: var(--text-color); }
+        .form-group textarea { height: 80px; resize: vertical; }
+        .template-item { padding: 10px; margin-bottom: 6px; border: 1px solid var(--border-color); border-radius: 4px; cursor: pointer; }
+        .template-item:hover { background-color: rgba(97, 175, 239, 0.1); }
+        .template-name { font-weight: bold; }
+        .template-description { font-size: 0.9em; opacity: 0.8; margin-top: 4px; }
+        .snapshot-item { padding: 10px; margin-bottom: 8px; border: 1px solid var(--border-color); border-radius: 4px; }
+        .snapshot-header { display: flex; justify-content: between; align-items: center; margin-bottom: 8px; }
+        .snapshot-title { font-weight: bold; }
+        .snapshot-time { font-size: 0.8em; opacity: 0.7; }
+        .snapshot-type { display: inline-block; padding: 2px 6px; border-radius: 10px; font-size: 0.7em; font-weight: bold; margin-left: 8px; }
+        .type-manual { background-color: #61afef; color: white; }
+        .type-auto { background-color: #98c379; color: white; }
+        .type-crash { background-color: #e06c75; color: white; }
+        .type-error { background-color: #e5c07b; color: black; }
+        .annotation { padding: 8px; margin: 4px 0; background-color: var(--bg-color); border-left: 3px solid #61afef; border-radius: 3px; }
+        .annotation-author { font-weight: bold; font-size: 0.9em; }
+        .annotation-content { margin-top: 4px; }
+        .participant-item { display: flex; align-items: center; padding: 8px; margin-bottom: 6px; border-radius: 4px; }
+        .participant-avatar { width: 32px; height: 32px; border-radius: 50%; margin-right: 8px; }
+        .participant-info { flex: 1; }
+        .participant-name { font-weight: bold; }
+        .participant-role { font-size: 0.8em; opacity: 0.7; }
+        .participant-status { width: 8px; height: 8px; border-radius: 50%; margin-left: 8px; }
+        .status-online { background-color: #98c379; }
+        .status-offline { background-color: #e06c75; }
+        .chat-container { height: 200px; overflow-y: auto; border: 1px solid var(--border-color); border-radius: 4px; padding: 8px; margin-bottom: 8px; }
+        .chat-message { margin-bottom: 8px; }
+        .chat-author { font-weight: bold; font-size: 0.9em; }
+        .chat-content { margin-top: 2px; }
+        .chat-time { font-size: 0.7em; opacity: 0.6; }
+        .chat-input { display: flex; gap: 8px; }
+        .chat-input input { flex: 1; }
+        .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0, 0, 0, 0.5); z-index: 1000; }
+        .modal.show { display: flex; align-items: center; justify-content: center; }
+        .modal-content { background-color: var(--input-bg); border-radius: 8px; padding: 24px; max-width: 500px; width: 90%; max-height: 80vh; overflow-y: auto; }
+        .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+        .modal-title { font-size: 1.2em; font-weight: bold; }
+        .modal-close { background: none; border: none; font-size: 1.5em; cursor: pointer; color: var(--text-color); }
+        .loading { text-align: center; padding: 20px; opacity: 0.7; }
+        .error-message { background-color: rgba(224, 108, 117, 0.1); border: 1px solid #e06c75; border-radius: 6px; padding: 12px; margin: 16px 0; color: #e06c75; }
+        .success-message { background-color: rgba(152, 195, 121, 0.1); border: 1px solid #98c379; border-radius: 6px; padding: 12px; margin: 16px 0; color: #98c379; }
+        @media (max-width: 1200px) {
+            .session-layout { grid-template-columns: 1fr; grid-template-rows: auto auto auto; }
+        }
+    </style>
+</head>
+<body>
+    <h2>Session Manager & Collaboration 🤝</h2>
+    
+    <div class="session-layout">
+        <!-- Left Sidebar - Sessions & Templates -->
+        <div class="sidebar">
+            <div class="section">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                    <h3>Debug Sessions</h3>
+                    <button class="btn btn-primary" onclick="showNewSessionModal()">+ New</button>
+                </div>
+                <div id="sessions-list">
+                    <div class="loading">Loading sessions...</div>
+                </div>
+            </div>
+            
+            <div class="section">
+                <h3>Session Templates</h3>
+                <div id="templates-list">
+                    <div class="loading">Loading templates...</div>
+                </div>
+            </div>
+            
+            <div class="section">
+                <h3>Quick Actions</h3>
+                <button class="btn btn-success" id="start-recording-btn" disabled>🔴 Start Recording</button>
+                <button class="btn btn-warning" id="pause-session-btn" disabled>⏸️ Pause</button>
+                <button class="btn btn-danger" id="stop-session-btn" disabled>⏹️ Stop</button>
+                <button class="btn" id="create-snapshot-btn" disabled>📸 Snapshot</button>
+            </div>
+        </div>
+        
+        <!-- Main Panel - Session Details & Snapshots -->
+        <div class="main-panel">
+            <div id="session-details">
+                <div class="loading">Select a session to view details</div>
+            </div>
+        </div>
+        
+        <!-- Right Panel - Collaboration -->
+        <div class="collaboration-panel">
+            <div class="section">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                    <h3>Collaboration</h3>
+                    <button class="btn btn-primary" id="start-collaboration-btn" disabled>🚀 Start</button>
+                </div>
+                <div id="collaboration-status">
+                    <div class="loading">No active collaboration</div>
+                </div>
+            </div>
+            
+            <div class="section">
+                <h3>Participants</h3>
+                <div id="participants-list">
+                    <div class="loading">No participants</div>
+                </div>
+            </div>
+            
+            <div class="section">
+                <h3>Team Chat</h3>
+                <div id="chat-container" class="chat-container">
+                    <div class="loading">Chat not available</div>
+                </div>
+                <div class="chat-input">
+                    <input type="text" id="chat-input" placeholder="Type a message..." disabled>
+                    <button class="btn" id="send-chat-btn" disabled>Send</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- New Session Modal -->
+    <div id="new-session-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div class="modal-title">Create New Debug Session</div>
+                <button class="modal-close" onclick="hideNewSessionModal()">&times;</button>
+            </div>
+            <form id="new-session-form">
+                <div class="form-group">
+                    <label for="session-name">Session Name</label>
+                    <input type="text" id="session-name" required>
+                </div>
+                <div class="form-group">
+                    <label for="session-description">Description</label>
+                    <textarea id="session-description"></textarea>
+                </div>
+                <div class="form-group">
+                    <label for="session-template">Template (Optional)</label>
+                    <select id="session-template">
+                        <option value="">No template</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>
+                        <input type="checkbox" id="session-collaborative"> Enable collaborative mode
+                    </label>
+                </div>
+                <div style="text-align: right;">
+                    <button type="button" class="btn" onclick="hideNewSessionModal()">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Create Session</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Snapshot Modal -->
+    <div id="snapshot-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div class="modal-title">Create Snapshot</div>
+                <button class="modal-close" onclick="hideSnapshotModal()">&times;</button>
+            </div>
+            <form id="snapshot-form">
+                <div class="form-group">
+                    <label for="snapshot-title">Title</label>
+                    <input type="text" id="snapshot-title" required>
+                </div>
+                <div class="form-group">
+                    <label for="snapshot-description">Description</label>
+                    <textarea id="snapshot-description"></textarea>
+                </div>
+                <div class="form-group">
+                    <label for="snapshot-type">Type</label>
+                    <select id="snapshot-type">
+                        <option value="manual">Manual</option>
+                        <option value="auto">Automatic</option>
+                        <option value="crash">Crash</option>
+                        <option value="error">Error</option>
+                    </select>
+                </div>
+                <div style="text-align: right;">
+                    <button type="button" class="btn" onclick="hideSnapshotModal()">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Create Snapshot</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script type="module">
+        // Mock implementations of the services
+        class MockSessionManagementService {
+            constructor() {
+                this.sessions = new Map();
+                this.templates = new Map();
+                this.currentSession = null;
+                this.snapshots = new Map();
+                this.eventListeners = new Map();
+                this.loadMockData();
+            }
+
+            loadMockData() {
+                // Mock sessions
+                const mockSessions = [
+                    {
+                        id: 'session_001',
+                        name: 'Media Playback Debug',
+                        description: 'Investigating video playback issues on Samsung displays',
+                        createdAt: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
+                        updatedAt: new Date(Date.now() - 30 * 60 * 1000).toISOString(),
+                        createdBy: 'john_dev',
+                        status: 'completed',
+                        tags: ['media', 'samsung'],
+                        devices: ['device_001'],
+                        duration: 7200000,
+                        isShared: true,
+                        shareUrl: 'https://devhub.example.com/shared/session_001',
+                        metadata: {
+                            deviceInfo: [{ model: 'SM-T870', androidVersion: '11' }],
+                            toolsUsed: ['logcat-parser', 'device-monitor'],
+                            crashCount: 2,
+                            errorCount: 15,
+                            warningCount: 8,
+                            performanceIssues: 3,
+                            linkedIssues: ['#123', '#124']
+                        }
+                    },
+                    {
+                        id: 'session_002',
+                        name: 'Network Connectivity Test',
+                        description: 'Testing network stability and performance',
+                        createdAt: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(),
+                        updatedAt: new Date(Date.now() - 12 * 60 * 60 * 1000).toISOString(),
+                        createdBy: 'jane_qa',
+                        status: 'active',
+                        tags: ['network', 'performance'],
+                        devices: ['device_002'],
+                        duration: 0,
+                        isShared: false,
+                        metadata: {
+                            deviceInfo: [{ model: 'LG-49UH5C', androidVersion: '9' }],
+                            toolsUsed: ['performance-dashboard'],
+                            crashCount: 0,
+                            errorCount: 3,
+                            warningCount: 12,
+                            performanceIssues: 1,
+                            linkedIssues: []
+                        }
+                    }
+                ];
+
+                mockSessions.forEach(session => {
+                    this.sessions.set(session.id, session);
+                });
+
+                // Mock templates
+                const mockTemplates = [
+                    {
+                        id: 'template_001',
+                        name: 'Media Playback Debug',
+                        description: 'Standard workflow for debugging media playback issues',
+                        category: 'media',
+                        tools: ['logcat-parser', 'performance-dashboard', 'device-monitor'],
+                        usageCount: 45,
+                        isPublic: true
+                    },
+                    {
+                        id: 'template_002',
+                        name: 'Network Connectivity Debug',
+                        description: 'Diagnose network-related issues',
+                        category: 'network',
+                        tools: ['logcat-parser', 'device-monitor'],
+                        usageCount: 32,
+                        isPublic: true
+                    }
+                ];
+
+                mockTemplates.forEach(template => {
+                    this.templates.set(template.id, template);
+                });
+
+                // Mock snapshots
+                this.snapshots.set('session_001', [
+                    {
+                        id: 'snapshot_001',
+                        sessionId: 'session_001',
+                        timestamp: new Date(Date.now() - 60 * 60 * 1000).toISOString(),
+                        type: 'crash',
+                        title: 'MediaPlayer Crash',
+                        description: 'Application crashed during video playback',
+                        annotations: [
+                            {
+                                id: 'ann_001',
+                                author: 'john_dev',
+                                type: 'note',
+                                content: 'This crash occurs consistently with H.265 videos',
+                                timestamp: new Date(Date.now() - 50 * 60 * 1000).toISOString(),
+                                replies: []
+                            }
+                        ]
+                    },
+                    {
+                        id: 'snapshot_002',
+                        sessionId: 'session_001',
+                        timestamp: new Date(Date.now() - 30 * 60 * 1000).toISOString(),
+                        type: 'manual',
+                        title: 'Performance Baseline',
+                        description: 'Captured performance metrics before optimization',
+                        annotations: []
+                    }
+                ]);
+            }
+
+            async getSessions() {
+                return Array.from(this.sessions.values());
+            }
+
+            async getTemplates() {
+                return Array.from(this.templates.values());
+            }
+
+            async startSession(name, description, templateId) {
+                const session = {
+                    id: `session_${Date.now()}`,
+                    name,
+                    description,
+                    createdAt: new Date().toISOString(),
+                    updatedAt: new Date().toISOString(),
+                    createdBy: 'current_user',
+                    status: 'active',
+                    tags: [],
+                    devices: [],
+                    duration: 0,
+                    isShared: false,
+                    metadata: {
+                        deviceInfo: [],
+                        toolsUsed: [],
+                        crashCount: 0,
+                        errorCount: 0,
+                        warningCount: 0,
+                        performanceIssues: 0,
+                        linkedIssues: []
+                    }
+                };
+
+                this.sessions.set(session.id, session);
+                this.currentSession = session;
+                this.emit('sessionStarted', { session });
+                return session;
+            }
+
+            async stopSession() {
+                if (this.currentSession) {
+                    this.currentSession.status = 'completed';
+                    this.currentSession.updatedAt = new Date().toISOString();
+                    this.emit('sessionStopped', { session: this.currentSession });
+                    this.currentSession = null;
+                }
+            }
+
+            async createSnapshot(title, description, type = 'manual') {
+                if (!this.currentSession) throw new Error('No active session');
+
+                const snapshot = {
+                    id: `snapshot_${Date.now()}`,
+                    sessionId: this.currentSession.id,
+                    timestamp: new Date().toISOString(),
+                    type,
+                    title,
+                    description,
+                    annotations: []
+                };
+
+                let sessionSnapshots = this.snapshots.get(this.currentSession.id) || [];
+                sessionSnapshots.push(snapshot);
+                this.snapshots.set(this.currentSession.id, sessionSnapshots);
+
+                this.emit('snapshotCreated', { snapshot });
+                return snapshot;
+            }
+
+            async getSessionSnapshots(sessionId) {
+                return this.snapshots.get(sessionId) || [];
+            }
+
+            getCurrentSession() {
+                return this.currentSession;
+            }
+
+            on(event, callback) {
+                if (!this.eventListeners.has(event)) {
+                    this.eventListeners.set(event, []);
+                }
+                this.eventListeners.get(event).push(callback);
+            }
+
+            emit(event, data) {
+                const listeners = this.eventListeners.get(event) || [];
+                listeners.forEach(callback => callback(data));
+            }
+        }
+
+        class MockTeamWorkspaceService {
+            constructor() {
+                this.collaborationSessions = new Map();
+                this.eventListeners = new Map();
+                this.currentUser = {
+                    id: 'user_001',
+                    username: 'john_dev',
+                    displayName: 'John Developer',
+                    avatar: '/placeholder.svg?height=32&width=32'
+                };
+            }
+
+            async startCollaboration(workspaceId) {
+                const session = {
+                    id: `collab_${Date.now()}`,
+                    workspaceId,
+                    host: this.currentUser.id,
+                    participants: [
+                        {
+                            userId: this.currentUser.id,
+                            role: 'host',
+                            joinedAt: new Date().toISOString(),
+                            isActive: true
+                        }
+                    ],
+                    status: 'active',
+                    startedAt: new Date().toISOString(),
+                    chat: []
+                };
+
+                this.collaborationSessions.set(session.id, session);
+                this.emit('collaborationStarted', { session });
+                return session;
+            }
+
+            async sendChatMessage(sessionId, content) {
+                const session = this.collaborationSessions.get(sessionId);
+                if (!session) throw new Error('Session not found');
+
+                const message = {
+                    id: `msg_${Date.now()}`,
+                    userId: this.currentUser.id,
+                    content,
+                    type: 'text',
+                    timestamp: new Date().toISOString()
+                };
+
+                session.chat.push(message);
+                this.emit('chatMessage', { session, message });
+                return message;
+            }
+
+            getCurrentUser() {
+                return this.currentUser;
+            }
+
+            on(event, callback) {
+                if (!this.eventListeners.has(event)) {
+                    this.eventListeners.set(event, []);
+                }
+                this.eventListeners.get(event).push(callback);
+            }
+
+            emit(event, data) {
+                const listeners = this.eventListeners.get(event) || [];
+                listeners.forEach(callback => callback(data));
+            }
+        }
+
+        // Initialize services
+        const sessionService = new MockSessionManagementService();
+        const teamService = new MockTeamWorkspaceService();
+
+        // UI State
+        let selectedSession = null;
+        let activeCollaboration = null;
+        let currentToolId = '';
+
+        // Initialize UI
+        async function initializeUI() {
+            await loadSessions();
+            await loadTemplates();
+            setupEventListeners();
+        }
+
+        async function loadSessions() {
+            const sessions = await sessionService.getSessions();
+            const container = document.getElementById('sessions-list');
+            
+            if (sessions.length === 0) {
+                container.innerHTML = '<div class="loading">No sessions found</div>';
+                return;
+            }
+
+            container.innerHTML = sessions.map(session => `
+                <div class="session-item" data-session-id="${session.id}">
+                    <div class="session-name">${session.name}</div>
+                    <div class="session-info">
+                        Created: ${new Date(session.createdAt).toLocaleDateString()}<br>
+                        Duration: ${Math.round(session.duration / 1000 / 60)} min
+                    </div>
+                    <span class="session-status status-${session.status}">${session.status.toUpperCase()}</span>
+                </div>
+            `).join('');
+
+            // Add click listeners
+            container.querySelectorAll('.session-item').forEach(item => {
+                item.addEventListener('click', () => {
+                    const sessionId = item.dataset.sessionId;
+                    selectSession(sessionId);
+                });
+            });
+        }
+
+        async function loadTemplates() {
+            const templates = await sessionService.getTemplates();
+            const container = document.getElementById('templates-list');
+            const select = document.getElementById('session-template');
+
+            if (templates.length === 0) {
+                container.innerHTML = '<div class="loading">No templates found</div>';
+                return;
+            }
+
+            container.innerHTML = templates.map(template => `
+                <div class="template-item" data-template-id="${template.id}">
+                    <div class="template-name">${template.name}</div>
+                    <div class="template-description">${template.description}</div>
+                    <div style="font-size: 0.8em; opacity: 0.7; margin-top: 4px;">
+                        Used ${template.usageCount} times • ${template.tools.length} tools
+                    </div>
+                </div>
+            `).join('');
+
+            // Populate template select
+            select.innerHTML = '<option value="">No template</option>' + 
+                templates.map(template => `
+                    <option value="${template.id}">${template.name}</option>
+                `).join('');
+        }
+
+        async function selectSession(sessionId) {
+            const sessions = await sessionService.getSessions();
+            selectedSession = sessions.find(s => s.id === sessionId);
+            
+            if (!selectedSession) return;
+
+            // Update UI
+            document.querySelectorAll('.session-item').forEach(item => {
+                item.classList.toggle('active', item.dataset.sessionId === sessionId);
+            });
+
+            // Load session details
+            await loadSessionDetails(selectedSession);
+            
+            // Enable/disable buttons based on session status
+            updateButtonStates();
+        }
+
+        async function loadSessionDetails(session) {
+            const container = document.getElementById('session-details');
+            const snapshots = await sessionService.getSessionSnapshots(session.id);
+
+            container.innerHTML = `
+                <div class="section">
+                    <h3>${session.name}</h3>
+                    <p>${session.description}</p>
+                    
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 16px 0;">
+                        <div>
+                            <strong>Status:</strong> <span class="session-status status-${session.status}">${session.status.toUpperCase()}</span><br>
+                            <strong>Created:</strong> ${new Date(session.createdAt).toLocaleString()}<br>
+                            <strong>Duration:</strong> ${Math.round(session.duration / 1000 / 60)} minutes<br>
+                            <strong>Tools Used:</strong> ${session.metadata.toolsUsed.join(', ') || 'None'}
+                        </div>
+                        <div>
+                            <strong>Crashes:</strong> ${session.metadata.crashCount}<br>
+                            <strong>Errors:</strong> ${session.metadata.errorCount}<br>
+                            <strong>Warnings:</strong> ${session.metadata.warningCount}<br>
+                            <strong>Performance Issues:</strong> ${session.metadata.performanceIssues}
+                        </div>
+                    </div>
+
+                    ${session.isShared ? `
+                        <div class="success-message">
+                            <strong>Shared Session</strong><br>
+                            Share URL: <a href="${session.shareUrl}" target="_blank">${session.shareUrl}</a>
+                        </div>
+                    ` : ''}
+                </div>
+
+                <div class="section">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                        <h3>Snapshots (${snapshots.length})</h3>
+                        <button class="btn btn-primary" onclick="showSnapshotModal()" ${session.status !== 'active' ? 'disabled' : ''}>
+                            + Add Snapshot
+                        </button>
+                    </div>
+                    
+                    <div id="snapshots-container">
+                        ${snapshots.length === 0 ? '<div class="loading">No snapshots yet</div>' : 
+                            snapshots.map(snapshot => `
+                                <div class="snapshot-item">
+                                    <div class="snapshot-header">
+                                        <div>
+                                            <span class="snapshot-title">${snapshot.title}</span>
+                                            <span class="snapshot-type type-${snapshot.type}">${snapshot.type.toUpperCase()}</span>
+                                        </div>
+                                        <span class="snapshot-time">${new Date(snapshot.timestamp).toLocaleString()}</span>
+                                    </div>
+                                    <div>${snapshot.description}</div>
+                                    ${snapshot.annotations.length > 0 ? `
+                                        <div style="margin-top: 8px;">
+                                            <strong>Annotations:</strong>
+                                            ${snapshot.annotations.map(annotation => `
+                                                <div class="annotation">
+                                                    <div class="annotation-author">${annotation.author}</div>
+                                                    <div class="annotation-content">${annotation.content}</div>
+                                                </div>
+                                            `).join('')}
+                                        </div>
+                                    ` : ''}
+                                </div>
+                            `).join('')
+                        }
+                    </div>
+                </div>
+            `;
+        }
+
+        function updateButtonStates() {
+            const currentSession = sessionService.getCurrentSession();
+            const isRecording = currentSession && currentSession.status === 'active';
+            
+            document.getElementById('start-recording-btn').disabled = isRecording;
+            document.getElementById('pause-session-btn').disabled = !isRecording;
+            document.getElementById('stop-session-btn').disabled = !currentSession;
+            document.getElementById('create-snapshot-btn').disabled = !isRecording;
+            document.getElementById('start-collaboration-btn').disabled = !selectedSession;
+        }
+
+        function setupEventListeners() {
+            // Session management buttons
+            document.getElementById('start-recording-btn').addEventListener('click', async () => {
+                if (!selectedSession) return;
+                
+                try {
+                    await sessionService.startSession(
+                        selectedSession.name + ' (Recording)',
+                        'Recording session based on: ' + selectedSession.description
+                    );
+                    updateButtonStates();
+                    await loadSessions();
+                } catch (error) {
+                    showError('Failed to start recording: ' + error.message);
+                }
+            });
+
+            document.getElementById('stop-session-btn').addEventListener('click', async () => {
+                try {
+                    await sessionService.stopSession();
+                    updateButtonStates();
+                    await loadSessions();
+                } catch (error) {
+                    showError('Failed to stop session: ' + error.message);
+                }
+            });
+
+            // New session form
+            document.getElementById('new-session-form').addEventListener('submit', async (e) => {
+                e.preventDefault();
+                
+                const name = document.getElementById('session-name').value;
+                const description = document.getElementById('session-description').value;
+                const templateId = document.getElementById('session-template').value;
+                const collaborative = document.getElementById('session-collaborative').checked;
+
+                try {
+                    const session = await sessionService.startSession(name, description, templateId);
+                    
+                    if (collaborative) {
+                        await startCollaboration(session.id);
+                    }
+                    
+                    hideNewSessionModal();
+                    await loadSessions();
+                    selectSession(session.id);
+                    updateButtonStates();
+                } catch (error) {
+                    showError('Failed to create session: ' + error.message);
+                }
+            });
+
+            // Snapshot form
+            document.getElementById('snapshot-form').addEventListener('submit', async (e) => {
+                e.preventDefault();
+                
+                const title = document.getElementById('snapshot-title').value;
+                const description = document.getElementById('snapshot-description').value;
+                const type = document.getElementById('snapshot-type').value;
+
+                try {
+                    await sessionService.createSnapshot(title, description, type);
+                    hideSnapshotModal();
+                    if (selectedSession) {
+                        await loadSessionDetails(selectedSession);
+                    }
+                } catch (error) {
+                    showError('Failed to create snapshot: ' + error.message);
+                }
+            });
+
+            // Collaboration
+            document.getElementById('start-collaboration-btn').addEventListener('click', async () => {
+                if (!selectedSession) return;
+                await startCollaboration(selectedSession.id);
+            });
+
+            // Chat
+            document.getElementById('send-chat-btn').addEventListener('click', sendChatMessage);
+            document.getElementById('chat-input').addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') {
+                    sendChatMessage();
+                }
+            });
+
+            // Service event listeners
+            sessionService.on('sessionStarted', (data) => {
+                showSuccess('Session started: ' + data.session.name);
+            });
+
+            sessionService.on('sessionStopped', (data) => {
+                showSuccess('Session completed: ' + data.session.name);
+            });
+
+            sessionService.on('snapshotCreated', (data) => {
+                showSuccess('Snapshot created: ' + data.snapshot.title);
+            });
+
+            teamService.on('collaborationStarted', (data) => {
+                activeCollaboration = data.session;
+                updateCollaborationUI();
+                showSuccess('Collaboration session started');
+            });
+
+            teamService.on('chatMessage', (data) => {
+                addChatMessage(data.message);
+            });
+        }
+
+        async function startCollaboration(sessionId) {
+            try {
+                const session = await teamService.startCollaboration(sessionId);
+                activeCollaboration = session;
+                updateCollaborationUI();
+            } catch (error) {
+                showError('Failed to start collaboration: ' + error.message);
+            }
+        }
+
+        function updateCollaborationUI() {
+            const statusContainer = document.getElementById('collaboration-status');
+            const participantsContainer = document.getElementById('participants-list');
+            const chatContainer = document.getElementById('chat-container');
+            const chatInput = document.getElementById('chat-input');
+            const sendBtn = document.getElementById('send-chat-btn');
+
+            if (!activeCollaboration) {
+                statusContainer.innerHTML = '<div class="loading">No active collaboration</div>';
+                participantsContainer.innerHTML = '<div class="loading">No participants</div>';
+                chatContainer.innerHTML = '<div class="loading">Chat not available</div>';
+                chatInput.disabled = true;
+                sendBtn.disabled = true;
+                return;
+            }
+
+            // Update status
+            statusContainer.innerHTML = `
+                <div class="success-message">
+                    <strong>Active Collaboration</strong><br>
+                    Session ID: ${activeCollaboration.id}<br>
+                    Started: ${new Date(activeCollaboration.startedAt).toLocaleTimeString()}
+                </div>
+            `;
+
+            // Update participants
+            const currentUser = teamService.getCurrentUser();
+            participantsContainer.innerHTML = activeCollaboration.participants.map(participant => `
+                <div class="participant-item">
+                    <img src="${currentUser.avatar}" alt="Avatar" class="participant-avatar">
+                    <div class="participant-info">
+                        <div class="participant-name">${participant.userId === currentUser.id ? currentUser.displayName : 'User ' + participant.userId}</div>
+                        <div class="participant-role">${participant.role}</div>
+                    </div>
+                    <div class="participant-status ${participant.isActive ? 'status-online' : 'status-offline'}"></div>
+                </div>
+            `).join('');
+
+            // Update chat
+            chatContainer.innerHTML = activeCollaboration.chat.length === 0 ? 
+                '<div class="loading">No messages yet</div>' :
+                activeCollaboration.chat.map(message => `
+                    <div class="chat-message">
+                        <div class="chat-author">${message.userId === currentUser.id ? 'You' : 'User ' + message.userId}</div>
+                        <div class="chat-content">${message.content}</div>
+                        <div class="chat-time">${new Date(message.timestamp).toLocaleTimeString()}</div>
+                    </div>
+                `).join('');
+
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+            chatInput.disabled = false;
+            sendBtn.disabled = false;
+        }
+
+        async function sendChatMessage() {
+            if (!activeCollaboration) return;
+
+            const input = document.getElementById('chat-input');
+            const message = input.value.trim();
+            
+            if (!message) return;
+
+            try {
+                await teamService.sendChatMessage(activeCollaboration.id, message);
+                input.value = '';
+            } catch (error) {
+                showError('Failed to send message: ' + error.message);
+            }
+        }
+
+        function addChatMessage(message) {
+            const container = document.getElementById('chat-container');
+            const currentUser = teamService.getCurrentUser();
+            
+            const messageElement = document.createElement('div');
+            messageElement.className = 'chat-message';
+            messageElement.innerHTML = `
+                <div class="chat-author">${message.userId === currentUser.id ? 'You' : 'User ' + message.userId}</div>
+                <div class="chat-content">${message.content}</div>
+                <div class="chat-time">${new Date(message.timestamp).toLocaleTimeString()}</div>
+            `;
+            
+            container.appendChild(messageElement);
+            container.scrollTop = container.scrollHeight;
+        }
+
+        // Modal functions
+        function showNewSessionModal() {
+            document.getElementById('new-session-modal').classList.add('show');
+        }
+
+        function hideNewSessionModal() {
+            document.getElementById('new-session-modal').classList.remove('show');
+            document.getElementById('new-session-form').reset();
+        }
+
+        function showSnapshotModal() {
+            document.getElementById('snapshot-modal').classList.add('show');
+        }
+
+        function hideSnapshotModal() {
+            document.getElementById('snapshot-modal').classList.remove('show');
+            document.getElementById('snapshot-form').reset();
+        }
+
+        // Global functions
+        window.showNewSessionModal = showNewSessionModal;
+        window.hideNewSessionModal = hideNewSessionModal;
+        window.showSnapshotModal = showSnapshotModal;
+        window.hideSnapshotModal = hideSnapshotModal;
+
+        // Utility functions
+        function showError(message) {
+            // In a real implementation, this would show a proper error notification
+            console.error(message);
+            alert('Error: ' + message);
+        }
+
+        function showSuccess(message) {
+            // In a real implementation, this would show a proper success notification
+            console.log(message);
+        }
+
+        function saveState() {
+            if (currentToolId) {
+                const state = {
+                    selectedSessionId: selectedSession?.id,
+                    activeCollaborationId: activeCollaboration?.id
+                };
+                localStorage.setItem(`tool-state-${currentToolId}`, JSON.stringify(state));
+            }
+        }
+
+        function loadState() {
+            if (currentToolId) {
+                const savedState = localStorage.getItem(`tool-state-${currentToolId}`);
+                if (savedState) {
+                    const state = JSON.parse(savedState);
+                    if (state.selectedSessionId) {
+                        selectSession(state.selectedSessionId);
+                    }
+                }
+            }
+        }
+
+        // Apply theme and receive toolId from parent
+        window.addEventListener('message', (event) => {
+            if (event.data.type === 'themeChange') {
+                document.documentElement.setAttribute('data-theme', event.data.theme);
+            } else if (event.data.type === 'toolId') {
+                currentToolId = event.data.toolId;
+                loadState();
+            }
+        });
+
+        window.parent.postMessage({ type: 'requestTheme' }, '*');
+        window.parent.postMessage({ type: 'requestToolId' }, '*');
+
+        // Initialize the application
+        initializeUI();
+    </script>
+</body>
+</html>

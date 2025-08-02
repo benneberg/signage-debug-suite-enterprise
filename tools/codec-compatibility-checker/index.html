@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Codec Compatibility Checker</title>
+    <style>
+        body { font-family: sans-serif; padding: 20px; background-color: var(--bg-color); color: var(--text-color); }
+        h2 { color: var(--text-color); margin-bottom: 15px; }
+        .upload-area { border: 2px dashed var(--border-color); border-radius: 8px; padding: 40px; text-align: center; margin: 20px 0; cursor: pointer; transition: border-color 0.3s; }
+        .upload-area:hover { border-color: var(--button-bg); }
+        .upload-area.dragover { border-color: var(--button-bg); background-color: rgba(0, 123, 255, 0.1); }
+        input[type="file"] { display: none; }
+        .results { margin-top: 20px; padding: 15px; border: 1px solid var(--border-color); background-color: var(--input-bg); border-radius: 5px; }
+        .compatibility-item { padding: 10px; margin: 5px 0; border-radius: 5px; }
+        .compatible { background-color: rgba(152, 195, 121, 0.2); border-left: 4px solid #98c379; }
+        .incompatible { background-color: rgba(224, 108, 117, 0.2); border-left: 4px solid #e06c75; }
+        .warning { background-color: rgba(229, 192, 123, 0.2); border-left: 4px solid #e5c07b; }
+    </style>
+</head>
+<body>
+    <h2>Codec Compatibility Checker 🎬</h2>
+    <p>Check if your media files are compatible with common digital signage players and Android devices.</p>
+    
+    <div class="upload-area" id="upload-area">
+        <p>📁 Drop media files here or click to select</p>
+        <p><small>Supports: MP4, WebM, AVI, MOV, JPG, PNG, WebP</small></p>
+        <input type="file" id="file-input" multiple accept="video/*,image/*">
+    </div>
+    
+    <div class="results" id="results" style="display: none;">
+        <h3>Compatibility Results:</h3>
+        <div id="results-content"></div>
+    </div>
+
+    <script>
+        const uploadArea = document.getElementById('upload-area');
+        const fileInput = document.getElementById('file-input');
+        const results = document.getElementById('results');
+        const resultsContent = document.getElementById('results-content');
+        let currentToolId = '';
+
+        // Mock compatibility database
+        const compatibilityRules = {
+            'video/mp4': { compatible: true, note: 'Widely supported across all Android signage players' },
+            'video/webm': { compatible: true, note: 'Good support, efficient for web-based players' },
+            'video/avi': { compatible: false, note: 'Limited support, consider converting to MP4' },
+            'video/quicktime': { compatible: false, note: 'Not supported on Android, convert to MP4' },
+            'image/jpeg': { compatible: true, note: 'Universal support' },
+            'image/png': { compatible: true, note: 'Universal support with transparency' },
+            'image/webp': { compatible: true, note: 'Modern format with good compression' },
+            'image/gif': { compatible: true, note: 'Supported but consider MP4 for animations' }
+        };
+
+        function saveState() {
+            if (currentToolId) {
+                const state = {
+                    resultsContent: resultsContent.innerHTML,
+                    resultsDisplay: results.style.display
+                };
+                localStorage.setItem(`tool-state-${currentToolId}`, JSON.stringify(state));
+            }
+        }
+
+        function loadState() {
+            if (currentToolId) {
+                const savedState = localStorage.getItem(`tool-state-${currentToolId}`);
+                if (savedState) {
+                    const state = JSON.parse(savedState);
+                    resultsContent.innerHTML = state.resultsContent || '';
+                    results.style.display = state.resultsDisplay || 'none';
+                }
+            }
+        }
+
+        uploadArea.addEventListener('click', () => fileInput.click());
+        uploadArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadArea.classList.add('dragover');
+        });
+        uploadArea.addEventListener('dragleave', () => {
+            uploadArea.classList.remove('dragover');
+        });
+        uploadArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadArea.classList.remove('dragover');
+            handleFiles(e.dataTransfer.files);
+            saveState(); // Save state after drop
+        });
+
+        fileInput.addEventListener('change', (e) => {
+            handleFiles(e.target.files);
+            saveState(); // Save state after file input change
+        });
+
+        function handleFiles(files) {
+            if (files.length === 0) return;
+            
+            results.style.display = 'block';
+            resultsContent.innerHTML = '';
+            
+            Array.from(files).forEach(file => {
+                const rule = compatibilityRules[file.type] || { compatible: false, note: 'Unknown format, compatibility uncertain' };
+                
+                const item = document.createElement('div');
+                item.className = `compatibility-item ${rule.compatible ? 'compatible' : 'incompatible'}`;
+                item.innerHTML = `
+                    <strong>${file.name}</strong> (${file.type})<br>
+                    <small>${rule.compatible ? '✅' : '❌'} ${rule.note}</small>
+                `;
+                resultsContent.appendChild(item);
+            });
+        }
+
+        // Apply theme and receive toolId from parent
+        window.addEventListener('message', (event) => {
+            if (event.data.type === 'themeChange') {
+                document.documentElement.setAttribute('data-theme', event.data.theme);
+            } else if (event.data.type === 'toolId') {
+                currentToolId = event.data.toolId;
+                loadState(); // Load state once toolId is received
+            }
+        });
+        // Request initial theme and toolId on load
+        window.parent.postMessage({ type: 'requestTheme' }, '*');
+        window.parent.postMessage({ type: 'requestToolId' }, '*');
+    </script>
+</body>
+</html>

@@ -1,0 +1,749 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Device Monitor & Analytics</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/date-fns@2.29.3/index.min.js"></script>
+    <style>
+        body { font-family: sans-serif; padding: 20px; background-color: var(--bg-color); color: var(--text-color); margin: 0; }
+        h2 { color: var(--text-color); margin-bottom: 15px; }
+        .dashboard-grid { display: grid; grid-template-columns: 300px 1fr; gap: 20px; height: calc(100vh - 100px); }
+        .sidebar { background-color: var(--input-bg); border: 1px solid var(--border-color); border-radius: 8px; padding: 16px; overflow-y: auto; }
+        .main-content { display: grid; grid-template-rows: auto 1fr; gap: 20px; }
+        .toolbar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; padding: 16px; background-color: var(--input-bg); border: 1px solid var(--border-color); border-radius: 8px; }
+        .toolbar button, .toolbar select { padding: 8px 12px; border: 1px solid var(--border-color); background-color: var(--bg-color); color: var(--text-color); border-radius: 5px; cursor: pointer; }
+        .toolbar button:hover { background-color: var(--button-bg); color: var(--button-text); }
+        .charts-container { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; overflow-y: auto; }
+        .chart-panel { background-color: var(--input-bg); border: 1px solid var(--border-color); border-radius: 8px; padding: 16px; }
+        .chart-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+        .chart-title { font-weight: bold; font-size: 1.1em; }
+        .chart-actions { display: flex; gap: 8px; }
+        .chart-actions button { padding: 4px 8px; font-size: 0.8em; border: 1px solid var(--border-color); background-color: var(--bg-color); color: var(--text-color); border-radius: 3px; cursor: pointer; }
+        .device-list { margin-bottom: 20px; }
+        .device-item { padding: 12px; margin-bottom: 8px; border: 1px solid var(--border-color); border-radius: 6px; cursor: pointer; transition: background-color 0.2s; }
+        .device-item:hover { background-color: rgba(97, 175, 239, 0.1); }
+        .device-item.selected { background-color: rgba(97, 175, 239, 0.2); border-color: #61afef; }
+        .device-name { font-weight: bold; margin-bottom: 4px; }
+        .device-info { font-size: 0.9em; opacity: 0.8; }
+        .device-status { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 0.8em; font-weight: bold; margin-top: 4px; }
+        .status-connected { background-color: #98c379; color: white; }
+        .status-disconnected { background-color: #e06c75; color: white; }
+        .status-unauthorized { background-color: #e5c07b; color: black; }
+        .connection-status { padding: 12px; margin-bottom: 16px; border-radius: 6px; text-align: center; font-weight: bold; }
+        .connection-connected { background-color: rgba(152, 195, 121, 0.2); border: 1px solid #98c379; color: #98c379; }
+        .connection-disconnected { background-color: rgba(224, 108, 117, 0.2); border: 1px solid #e06c75; color: #e06c75; }
+        .connection-connecting { background-color: rgba(229, 192, 123, 0.2); border: 1px solid #e5c07b; color: #e5c07b; }
+        .device-actions { margin-top: 20px; }
+        .device-actions button { width: 100%; margin-bottom: 8px; padding: 10px; background-color: var(--button-bg); color: var(--button-text); border: none; border-radius: 5px; cursor: pointer; }
+        .device-actions button:disabled { opacity: 0.5; cursor: not-allowed; }
+        .log-stream { margin-top: 20px; }
+        .log-stream-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+        .log-output { height: 200px; overflow-y: auto; background-color: var(--bg-color); border: 1px solid var(--border-color); border-radius: 4px; padding: 8px; font-family: monospace; font-size: 11px; }
+        .log-entry { margin-bottom: 2px; }
+        .log-E { color: #e06c75; }
+        .log-W { color: #e5c07b; }
+        .log-I { color: #56b6c2; }
+        .log-D { color: #c678dd; }
+        .log-V { color: #abb2bf; }
+        .chart-canvas { width: 100% !important; height: 300px !important; }
+        .loading { text-align: center; padding: 40px; opacity: 0.7; }
+        .error-message { background-color: rgba(224, 108, 117, 0.1); border: 1px solid #e06c75; border-radius: 6px; padding: 12px; margin: 16px 0; color: #e06c75; }
+        @media (max-width: 1200px) {
+            .dashboard-grid { grid-template-columns: 1fr; }
+            .charts-container { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+    <h2>Device Monitor & Analytics 📱📊</h2>
+    
+    <div class="dashboard-grid">
+        <div class="sidebar">
+            <div id="connection-status" class="connection-status connection-disconnected">
+                Disconnected from Device Service
+            </div>
+            
+            <div class="device-list">
+                <h3>Connected Devices</h3>
+                <div id="device-list-container">
+                    <div class="loading">No devices found</div>
+                </div>
+            </div>
+            
+            <div class="device-actions">
+                <button id="refresh-devices-btn">🔄 Refresh Devices</button>
+                <button id="take-screenshot-btn" disabled>📸 Take Screenshot</button>
+                <button id="restart-app-btn" disabled>🔄 Restart App</button>
+                <button id="clear-cache-btn" disabled>🗑️ Clear Cache</button>
+            </div>
+            
+            <div class="log-stream">
+                <div class="log-stream-header">
+                    <h4>Live Logs</h4>
+                    <button id="toggle-logs-btn" disabled>▶️ Start</button>
+                </div>
+                <div id="log-output" class="log-output">
+                    Select a device to view logs
+                </div>
+            </div>
+        </div>
+        
+        <div class="main-content">
+            <div class="toolbar">
+                <button id="connect-service-btn">🔌 Connect to Service</button>
+                <button id="start-monitoring-btn" disabled>📊 Start Monitoring</button>
+                <button id="export-data-btn" disabled>💾 Export Data</button>
+                <select id="time-range-select">
+                    <option value="5m">Last 5 minutes</option>
+                    <option value="15m">Last 15 minutes</option>
+                    <option value="1h">Last hour</option>
+                    <option value="6h">Last 6 hours</option>
+                </select>
+                <button id="generate-report-btn" disabled>📄 Generate Report</button>
+            </div>
+            
+            <div class="charts-container">
+                <div class="chart-panel">
+                    <div class="chart-header">
+                        <div class="chart-title">Performance Metrics</div>
+                        <div class="chart-actions">
+                            <button onclick="refreshChart('performance-chart')">🔄</button>
+                            <button onclick="exportChart('performance-chart')">💾</button>
+                        </div>
+                    </div>
+                    <canvas id="performance-chart" class="chart-canvas"></canvas>
+                </div>
+                
+                <div class="chart-panel">
+                    <div class="chart-header">
+                        <div class="chart-title">Event Timeline</div>
+                        <div class="chart-actions">
+                            <button onclick="refreshChart('timeline-chart')">🔄</button>
+                            <button onclick="exportChart('timeline-chart')">💾</button>
+                        </div>
+                    </div>
+                    <canvas id="timeline-chart" class="chart-canvas"></canvas>
+                </div>
+                
+                <div class="chart-panel">
+                    <div class="chart-header">
+                        <div class="chart-title">Memory Usage</div>
+                        <div class="chart-actions">
+                            <button onclick="refreshChart('memory-chart')">🔄</button>
+                            <button onclick="exportChart('memory-chart')">💾</button>
+                        </div>
+                    </div>
+                    <canvas id="memory-chart" class="chart-canvas"></canvas>
+                </div>
+                
+                <div class="chart-panel">
+                    <div class="chart-header">
+                        <div class="chart-title">Error Analysis</div>
+                        <div class="chart-actions">
+                            <button onclick="refreshChart('error-chart')">🔄</button>
+                            <button onclick="exportChart('error-chart')">💾</button>
+                        </div>
+                    </div>
+                    <canvas id="error-chart" class="chart-canvas"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+        // Mock implementations of the services for demo purposes
+        class MockDeviceConnectionService {
+            constructor() {
+                this.devices = [
+                    {
+                        id: 'device_001',
+                        name: 'Samsung Signage Display',
+                        model: 'SM-T870',
+                        androidVersion: '11',
+                        status: 'connected',
+                        lastSeen: new Date().toISOString(),
+                        capabilities: ['screenshot', 'logcat', 'shell', 'install'],
+                        ipAddress: '192.168.1.100',
+                        serialNumber: 'R58M123456'
+                    },
+                    {
+                        id: 'device_002',
+                        name: 'LG WebOS Signage',
+                        model: 'LG-49UH5C',
+                        androidVersion: '9',
+                        status: 'connected',
+                        lastSeen: new Date().toISOString(),
+                        capabilities: ['screenshot', 'logcat'],
+                        ipAddress: '192.168.1.101',
+                        serialNumber: 'LG789012'
+                    }
+                ];
+                this.connected = false;
+                this.selectedDevice = null;
+                this.logStreamActive = false;
+                this.eventListeners = new Map();
+            }
+
+            async connect() {
+                return new Promise((resolve) => {
+                    setTimeout(() => {
+                        this.connected = true;
+                        this.emit('connectionStatusChanged', { status: 'connected' });
+                        resolve(true);
+                    }, 1000);
+                });
+            }
+
+            async getDevices() {
+                return this.devices;
+            }
+
+            on(event, callback) {
+                if (!this.eventListeners.has(event)) {
+                    this.eventListeners.set(event, []);
+                }
+                this.eventListeners.get(event).push(callback);
+            }
+
+            emit(event, data) {
+                const listeners = this.eventListeners.get(event) || [];
+                listeners.forEach(callback => callback(data));
+            }
+
+            async takeScreenshot(deviceId) {
+                // Mock screenshot - return a placeholder
+                return 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==';
+            }
+
+            async startLogcatStream(deviceId) {
+                this.logStreamActive = true;
+                this.generateMockLogs();
+            }
+
+            async stopLogcatStream(deviceId) {
+                this.logStreamActive = false;
+            }
+
+            generateMockLogs() {
+                if (!this.logStreamActive) return;
+
+                const mockLogs = [
+                    { level: 'I', tag: 'SignageApp', message: 'Content updated successfully' },
+                    { level: 'D', tag: 'MediaPlayer', message: 'Video playback started' },
+                    { level: 'W', tag: 'NetworkManager', message: 'Connection unstable, retrying...' },
+                    { level: 'E', tag: 'WebView', message: 'JavaScript error in content' },
+                    { level: 'I', tag: 'DisplayManager', message: 'Screen resolution changed to 1920x1080' }
+                ];
+
+                const randomLog = mockLogs[Math.floor(Math.random() * mockLogs.length)];
+                const logEntry = {
+                    deviceId: this.selectedDevice,
+                    timestamp: new Date().toISOString(),
+                    ...randomLog,
+                    pid: Math.floor(Math.random() * 9999),
+                    tid: Math.floor(Math.random() * 9999)
+                };
+
+                this.emit('logReceived', { log: logEntry });
+
+                setTimeout(() => this.generateMockLogs(), 2000 + Math.random() * 3000);
+            }
+        }
+
+        class MockDataVisualizationService {
+            constructor() {
+                this.chartInstances = new Map();
+            }
+
+            createPerformanceChart(canvasId, metrics, type = 'all') {
+                const canvas = document.getElementById(canvasId);
+                const ctx = canvas.getContext('2d');
+
+                const labels = metrics.map(m => new Date(m.timestamp).toLocaleTimeString());
+                let datasets = [];
+
+                if (type === 'memory' || type === 'all') {
+                    datasets.push({
+                        label: 'Memory Usage (MB)',
+                        data: metrics.map(m => m.memory),
+                        borderColor: '#e06c75',
+                        backgroundColor: 'rgba(224, 108, 117, 0.1)',
+                        fill: true,
+                        tension: 0.4
+                    });
+                }
+
+                if (type === 'cpu' || type === 'all') {
+                    datasets.push({
+                        label: 'CPU Usage (%)',
+                        data: metrics.map(m => m.cpu),
+                        borderColor: '#61afef',
+                        backgroundColor: 'rgba(97, 175, 239, 0.1)',
+                        fill: true,
+                        tension: 0.4
+                    });
+                }
+
+                if (type === 'network' || type === 'all') {
+                    datasets.push({
+                        label: 'Network Usage (KB/s)',
+                        data: metrics.map(m => m.network),
+                        borderColor: '#98c379',
+                        backgroundColor: 'rgba(152, 195, 121, 0.1)',
+                        fill: true,
+                        tension: 0.4
+                    });
+                }
+
+                const config = {
+                    type: 'line',
+                    data: { labels, datasets },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        scales: {
+                            x: {
+                                display: true,
+                                title: { display: true, text: 'Time' }
+                            },
+                            y: {
+                                display: true,
+                                title: { display: true, text: 'Usage' }
+                            }
+                        },
+                        plugins: {
+                            legend: { display: true, position: 'top' },
+                            tooltip: { enabled: true }
+                        },
+                        animation: { duration: 750 },
+                        interaction: { intersect: false, mode: 'index' }
+                    }
+                };
+
+                const chartInstance = new Chart(ctx, config);
+                this.chartInstances.set(canvasId, chartInstance);
+                return canvasId;
+            }
+
+            createTimelineChart(canvasId, events) {
+                const canvas = document.getElementById(canvasId);
+                const ctx = canvas.getContext('2d');
+
+                // Group events by hour
+                const hourlyData = {};
+                events.forEach(event => {
+                    const hour = new Date(event.timestamp).getHours();
+                    if (!hourlyData[hour]) {
+                        hourlyData[hour] = { error: 0, warning: 0, info: 0, success: 0 };
+                    }
+                    hourlyData[hour][event.type]++;
+                });
+
+                const labels = Object.keys(hourlyData).map(h => `${h}:00`);
+                const datasets = [
+                    {
+                        label: 'Errors',
+                        data: Object.values(hourlyData).map(d => d.error),
+                        backgroundColor: '#e06c75'
+                    },
+                    {
+                        label: 'Warnings',
+                        data: Object.values(hourlyData).map(d => d.warning),
+                        backgroundColor: '#e5c07b'
+                    },
+                    {
+                        label: 'Info',
+                        data: Object.values(hourlyData).map(d => d.info),
+                        backgroundColor: '#56b6c2'
+                    },
+                    {
+                        label: 'Success',
+                        data: Object.values(hourlyData).map(d => d.success),
+                        backgroundColor: '#98c379'
+                    }
+                ];
+
+                const config = {
+                    type: 'bar',
+                    data: { labels, datasets },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        scales: {
+                            x: { stacked: true },
+                            y: { stacked: true }
+                        },
+                        plugins: {
+                            legend: { display: true, position: 'top' }
+                        }
+                    }
+                };
+
+                const chartInstance = new Chart(ctx, config);
+                this.chartInstances.set(canvasId, chartInstance);
+                return canvasId;
+            }
+
+            generateMockPerformanceData(count = 50) {
+                const data = [];
+                const now = Date.now();
+
+                for (let i = 0; i < count; i++) {
+                    data.push({
+                        timestamp: new Date(now - (count - i) * 30000).toISOString(),
+                        memory: 50 + Math.random() * 100 + Math.sin(i * 0.1) * 20,
+                        cpu: 20 + Math.random() * 60 + Math.sin(i * 0.2) * 15,
+                        network: Math.random() * 1000 + Math.sin(i * 0.15) * 200,
+                        battery: 100 - (i * 0.5) + Math.random() * 5,
+                        temperature: 35 + Math.random() * 10 + Math.sin(i * 0.05) * 3
+                    });
+                }
+
+                return data;
+            }
+
+            generateMockTimelineEvents(count = 20) {
+                const events = [];
+                const now = Date.now();
+                const eventTypes = ['error', 'warning', 'info', 'success'];
+                const eventTitles = {
+                    error: ['App Crash', 'Network Error', 'Media Playback Failed', 'Database Error'],
+                    warning: ['High Memory Usage', 'Slow Network', 'Low Battery', 'High Temperature'],
+                    info: ['App Started', 'Content Updated', 'User Interaction', 'System Event'],
+                    success: ['Content Loaded', 'Network Connected', 'Update Completed', 'Backup Created']
+                };
+
+                for (let i = 0; i < count; i++) {
+                    const type = eventTypes[Math.floor(Math.random() * eventTypes.length)];
+                    const titles = eventTitles[type];
+                    const title = titles[Math.floor(Math.random() * titles.length)];
+
+                    events.push({
+                        timestamp: new Date(now - (count - i) * 60000).toISOString(),
+                        type,
+                        title,
+                        description: `${title} occurred`,
+                        deviceId: `device_${Math.floor(Math.random() * 3) + 1}`
+                    });
+                }
+
+                return events;
+            }
+
+            updateChart(canvasId, newData) {
+                const chartInstance = this.chartInstances.get(canvasId);
+                if (chartInstance) {
+                    chartInstance.data = newData;
+                    chartInstance.update();
+                }
+            }
+
+            destroyChart(canvasId) {
+                const chartInstance = this.chartInstances.get(canvasId);
+                if (chartInstance) {
+                    chartInstance.destroy();
+                    this.chartInstances.delete(canvasId);
+                }
+            }
+
+            exportChart(canvasId, format = 'png') {
+                const canvas = document.getElementById(canvasId);
+                return canvas.toDataURL(`image/${format}`);
+            }
+        }
+
+        // Initialize services
+        const deviceService = new MockDeviceConnectionService();
+        const vizService = new MockDataVisualizationService();
+        
+        // UI Elements
+        const elements = {
+            connectionStatus: document.getElementById('connection-status'),
+            deviceListContainer: document.getElementById('device-list-container'),
+            connectServiceBtn: document.getElementById('connect-service-btn'),
+            refreshDevicesBtn: document.getElementById('refresh-devices-btn'),
+            takeScreenshotBtn: document.getElementById('take-screenshot-btn'),
+            restartAppBtn: document.getElementById('restart-app-btn'),
+            clearCacheBtn: document.getElementById('clear-cache-btn'),
+            toggleLogsBtn: document.getElementById('toggle-logs-btn'),
+            logOutput: document.getElementById('log-output'),
+            startMonitoringBtn: document.getElementById('start-monitoring-btn'),
+            exportDataBtn: document.getElementById('export-data-btn'),
+            generateReportBtn: document.getElementById('generate-report-btn')
+        };
+
+        let selectedDevice = null;
+        let monitoringActive = false;
+        let currentToolId = '';
+
+        function saveState() {
+            if (currentToolId) {
+                const state = {
+                    selectedDevice: selectedDevice,
+                    monitoringActive: monitoringActive
+                };
+                localStorage.setItem(`tool-state-${currentToolId}`, JSON.stringify(state));
+            }
+        }
+
+        function loadState() {
+            if (currentToolId) {
+                const savedState = localStorage.getItem(`tool-state-${currentToolId}`);
+                if (savedState) {
+                    const state = JSON.parse(savedState);
+                    selectedDevice = state.selectedDevice;
+                    monitoringActive = state.monitoringActive;
+                    if (monitoringActive) {
+                        startMonitoring();
+                    }
+                }
+            }
+        }
+
+        // Event Listeners
+        elements.connectServiceBtn.addEventListener('click', async () => {
+            elements.connectionStatus.textContent = 'Connecting...';
+            elements.connectionStatus.className = 'connection-status connection-connecting';
+            
+            try {
+                await deviceService.connect();
+                elements.connectionStatus.textContent = 'Connected to Device Service';
+                elements.connectionStatus.className = 'connection-status connection-connected';
+                elements.connectServiceBtn.textContent = '✅ Connected';
+                elements.connectServiceBtn.disabled = true;
+                
+                await refreshDevices();
+                saveState();
+            } catch (error) {
+                elements.connectionStatus.textContent = 'Connection Failed';
+                elements.connectionStatus.className = 'connection-status connection-disconnected';
+                console.error('Connection failed:', error);
+            }
+        });
+
+        elements.refreshDevicesBtn.addEventListener('click', refreshDevices);
+
+        elements.takeScreenshotBtn.addEventListener('click', async () => {
+            if (!selectedDevice) return;
+            
+            try {
+                const screenshot = await deviceService.takeScreenshot(selectedDevice);
+                // Open screenshot in new window
+                const win = window.open();
+                win.document.write(`<img src="${screenshot}" style="max-width: 100%; height: auto;">`);
+            } catch (error) {
+                alert('Failed to take screenshot: ' + error.message);
+            }
+        });
+
+        elements.toggleLogsBtn.addEventListener('click', async () => {
+            if (!selectedDevice) return;
+            
+            if (deviceService.logStreamActive) {
+                await deviceService.stopLogcatStream(selectedDevice);
+                elements.toggleLogsBtn.textContent = '▶️ Start';
+            } else {
+                await deviceService.startLogcatStream(selectedDevice);
+                elements.toggleLogsBtn.textContent = '⏹️ Stop';
+            }
+        });
+
+        elements.startMonitoringBtn.addEventListener('click', () => {
+            if (monitoringActive) {
+                stopMonitoring();
+            } else {
+                startMonitoring();
+            }
+        });
+
+        elements.exportDataBtn.addEventListener('click', () => {
+            const data = {
+                timestamp: new Date().toISOString(),
+                selectedDevice: selectedDevice,
+                performanceData: vizService.generateMockPerformanceData(),
+                timelineEvents: vizService.generateMockTimelineEvents()
+            };
+            
+            const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `device-monitor-data-${new Date().toISOString().slice(0, 10)}.json`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        });
+
+        // Device Service Event Listeners
+        deviceService.on('connectionStatusChanged', (data) => {
+            if (data.status === 'connected') {
+                elements.refreshDevicesBtn.disabled = false;
+                elements.startMonitoringBtn.disabled = false;
+            }
+        });
+
+        deviceService.on('logReceived', (data) => {
+            appendLogEntry(data.log);
+        });
+
+        async function refreshDevices() {
+            try {
+                const devices = await deviceService.getDevices();
+                renderDeviceList(devices);
+            } catch (error) {
+                console.error('Failed to refresh devices:', error);
+            }
+        }
+
+        function renderDeviceList(devices) {
+            if (devices.length === 0) {
+                elements.deviceListContainer.innerHTML = '<div class="loading">No devices found</div>';
+                return;
+            }
+
+            elements.deviceListContainer.innerHTML = devices.map(device => `
+                <div class="device-item ${selectedDevice === device.id ? 'selected' : ''}" data-device-id="${device.id}">
+                    <div class="device-name">${device.name}</div>
+                    <div class="device-info">${device.model} • Android ${device.androidVersion}</div>
+                    <div class="device-info">${device.ipAddress || device.serialNumber}</div>
+                    <span class="device-status status-${device.status}">${device.status.toUpperCase()}</span>
+                </div>
+            `).join('');
+
+            // Add click listeners
+            elements.deviceListContainer.querySelectorAll('.device-item').forEach(item => {
+                item.addEventListener('click', () => {
+                    const deviceId = item.dataset.deviceId;
+                    selectDevice(deviceId);
+                });
+            });
+        }
+
+        function selectDevice(deviceId) {
+            selectedDevice = deviceId;
+            deviceService.selectedDevice = deviceId;
+            
+            // Update UI
+            elements.deviceListContainer.querySelectorAll('.device-item').forEach(item => {
+                item.classList.toggle('selected', item.dataset.deviceId === deviceId);
+            });
+            
+            // Enable device-specific actions
+            elements.takeScreenshotBtn.disabled = false;
+            elements.restartAppBtn.disabled = false;
+            elements.clearCacheBtn.disabled = false;
+            elements.toggleLogsBtn.disabled = false;
+            
+            elements.logOutput.innerHTML = 'Device selected. Click "Start" to begin log streaming.';
+            saveState();
+        }
+
+        function appendLogEntry(log) {
+            const logEntry = document.createElement('div');
+            logEntry.className = `log-entry log-${log.level}`;
+            logEntry.textContent = `${new Date(log.timestamp).toLocaleTimeString()} ${log.level}/${log.tag}: ${log.message}`;
+            
+            elements.logOutput.appendChild(logEntry);
+            elements.logOutput.scrollTop = elements.logOutput.scrollHeight;
+            
+            // Keep only last 100 log entries
+            while (elements.logOutput.children.length > 100) {
+                elements.logOutput.removeChild(elements.logOutput.firstChild);
+            }
+        }
+
+        function startMonitoring() {
+            monitoringActive = true;
+            elements.startMonitoringBtn.textContent = '⏹️ Stop Monitoring';
+            elements.exportDataBtn.disabled = false;
+            elements.generateReportBtn.disabled = false;
+            
+            // Generate and display charts
+            const performanceData = vizService.generateMockPerformanceData();
+            const timelineEvents = vizService.generateMockTimelineEvents();
+            
+            vizService.createPerformanceChart('performance-chart', performanceData);
+            vizService.createTimelineChart('timeline-chart', timelineEvents);
+            vizService.createPerformanceChart('memory-chart', performanceData, 'memory');
+            
+            // Create error analysis chart
+            const errorData = timelineEvents.filter(e => e.type === 'error');
+            const errorTypes = errorData.reduce((acc, event) => {
+                acc[event.title] = (acc[event.title] || 0) + 1;
+                return acc;
+            }, {});
+            
+            const canvas = document.getElementById('error-chart');
+            const ctx = canvas.getContext('2d');
+            new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: Object.keys(errorTypes),
+                    datasets: [{
+                        data: Object.values(errorTypes),
+                        backgroundColor: ['#e06c75', '#e5c07b', '#61afef', '#98c379', '#c678dd']
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: true, position: 'right' }
+                    }
+                }
+            });
+            
+            saveState();
+        }
+
+        function stopMonitoring() {
+            monitoringActive = false;
+            elements.startMonitoringBtn.textContent = '📊 Start Monitoring';
+            saveState();
+        }
+
+        // Global functions for chart actions
+        window.refreshChart = (canvasId) => {
+            const performanceData = vizService.generateMockPerformanceData();
+            const timelineEvents = vizService.generateMockTimelineEvents();
+            
+            if (canvasId === 'performance-chart') {
+                vizService.destroyChart(canvasId);
+                vizService.createPerformanceChart(canvasId, performanceData);
+            } else if (canvasId === 'timeline-chart') {
+                vizService.destroyChart(canvasId);
+                vizService.createTimelineChart(canvasId, timelineEvents);
+            } else if (canvasId === 'memory-chart') {
+                vizService.destroyChart(canvasId);
+                vizService.createPerformanceChart(canvasId, performanceData, 'memory');
+            }
+        };
+
+        window.exportChart = (canvasId) => {
+            const dataUrl = vizService.exportChart(canvasId);
+            const a = document.createElement('a');
+            a.href = dataUrl;
+            a.download = `${canvasId}-${new Date().toISOString().slice(0, 10)}.png`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+        };
+
+        // Apply theme and receive toolId from parent
+        window.addEventListener('message', (event) => {
+            if (event.data.type === 'themeChange') {
+                document.documentElement.setAttribute('data-theme', event.data.theme);
+            } else if (event.data.type === 'toolId') {
+                currentToolId = event.data.toolId;
+                loadState();
+            }
+        });
+
+        window.parent.postMessage({ type: 'requestTheme' }, '*');
+        window.parent.postMessage({ type: 'requestToolId' }, '*');
+    </script>
+</body>
+</html>

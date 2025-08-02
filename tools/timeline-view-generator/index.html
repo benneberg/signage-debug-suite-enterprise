@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Timeline View Generator</title>
+    <style>
+        body { font-family: sans-serif; padding: 20px; background-color: var(--bg-color); color: var(--text-color); }
+        h2 { color: var(--text-color); margin-bottom: 15px; }
+        textarea { width: 100%; height: 150px; padding: 10px; border: 1px solid var(--border-color); background-color: var(--input-bg); color: var(--text-color); border-radius: 5px; resize: vertical; font-family: monospace; }
+        button { background-color: var(--button-bg); color: var(--button-text); border: none; padding: 10px 15px; border-radius: 5px; cursor: pointer; margin: 10px 5px 0 0; }
+        .timeline { margin-top: 20px; border: 1px solid var(--border-color); border-radius: 5px; background-color: var(--input-bg); }
+        .timeline-item { padding: 10px 15px; border-bottom: 1px solid var(--border-color); display: flex; align-items: center; gap: 15px; }
+        .timeline-item:last-child { border-bottom: none; }
+        .timeline-time { font-family: monospace; color: var(--button-bg); font-weight: bold; min-width: 100px; }
+        .timeline-level { padding: 2px 6px; border-radius: 3px; font-size: 0.8em; font-weight: bold; min-width: 40px; text-align: center; }
+        .level-E { background-color: #e06c75; color: white; }
+        .level-W { background-color: #e5c07b; color: black; }
+        .level-I { background-color: #56b6c2; color: white; }
+        .level-D { background-color: #c678dd; color: white; }
+        .level-V { background-color: #abb2bf; color: black; }
+        .timeline-content { flex-grow: 1; }
+        .timeline-tag { color: var(--button-bg); font-weight: bold; }
+    </style>
+</head>
+<body>
+    <h2>Timeline View Generator 📊</h2>
+    <p>Generate a visual timeline from logcat output or media metadata to understand event sequences.</p>
+    
+    <textarea id="log-input" placeholder="Paste logcat output here...
+
+Example:
+07-23 10:00:01.123  1234  5678 I App: Application started
+07-23 10:00:02.456  1234  5678 D Player: Initializing player
+07-23 10:00:05.789  1234  5678 E Player: Playback failed"></textarea>
+    
+    <button id="generate-btn">📊 Generate Timeline</button>
+    <button id="export-btn" style="display: none;">💾 Export Timeline</button>
+    
+    <div id="timeline-container" style="display: none;">
+        <h3>Timeline View:</h3>
+        <div class="timeline" id="timeline"></div>
+    </div>
+
+    <script>
+        const logInput = document.getElementById('log-input');
+        const generateBtn = document.getElementById('generate-btn');
+        const exportBtn = document.getElementById('export-btn');
+        const timelineContainer = document.getElementById('timeline-container');
+        const timeline = document.getElementById('timeline');
+        let currentToolId = '';
+
+        function saveState() {
+            if (currentToolId) {
+                const state = {
+                    logInput: logInput.value,
+                    timelineContent: timeline.innerHTML,
+                    timelineContainerDisplay: timelineContainer.style.display,
+                    exportBtnDisplay: exportBtn.style.display
+                };
+                localStorage.setItem(`tool-state-${currentToolId}`, JSON.stringify(state));
+            }
+        }
+
+        function loadState() {
+            if (currentToolId) {
+                const savedState = localStorage.getItem(`tool-state-${currentToolId}`);
+                if (savedState) {
+                    const state = JSON.parse(savedState);
+                    logInput.value = state.logInput || '';
+                    timeline.innerHTML = state.timelineContent || '';
+                    timelineContainer.style.display = state.timelineContainerDisplay || 'none';
+                    exportBtn.style.display = state.exportBtnDisplay || 'none';
+                }
+            }
+        }
+
+        generateBtn.addEventListener('click', () => {
+            const input = logInput.value.trim();
+            if (!input) {
+                alert('Please paste some log data to generate a timeline.');
+                return;
+            }
+
+            const timelineData = parseLogData(input);
+            renderTimeline(timelineData);
+            timelineContainer.style.display = 'block';
+            exportBtn.style.display = 'inline-block';
+            saveState(); // Save state after generation
+        });
+
+        function parseLogData(input) {
+            const lines = input.split('\n').filter(line => line.trim());
+            const timelineData = [];
+
+            lines.forEach(line => {
+                // Parse logcat format: MM-dd HH:mm:ss.SSS PID TID LEVEL TAG: MESSAGE
+                const match = line.match(/^(\d{2}-\d{2}\s\d{2}:\d{2}:\d{2}\.\d{3})\s+\d+\s+\d+\s+([VDIWEF])\s+([^:]+):\s*(.*)$/);
+                if (match) {
+                    const [, timestamp, level, tag, message] = match;
+                    timelineData.push({ timestamp, level, tag, message });
+                }
+            });
+
+            return timelineData.sort((a, b) => a.timestamp.localeCompare(b.timestamp));
+        }
+
+        function renderTimeline(data) {
+            timeline.innerHTML = '';
+            
+            if (data.length === 0) {
+                timeline.innerHTML = '<div style="padding: 20px; text-align: center; opacity: 0.7;">No valid log entries found. Please check the format.</div>';
+                return;
+            }
+
+            data.forEach(item => {
+                const timelineItem = document.createElement('div');
+                timelineItem.className = 'timeline-item';
+                timelineItem.innerHTML = `
+                    <div class="timeline-time">${item.timestamp}</div>
+                    <div class="timeline-level level-${item.level}">${item.level}</div>
+                    <div class="timeline-content">
+                        <span class="timeline-tag">${item.tag}:</span> ${item.message}
+                    </div>
+                `;
+                timeline.appendChild(timelineItem);
+            });
+        }
+
+        exportBtn.addEventListener('click', () => {
+            const timelineItems = timeline.querySelectorAll('.timeline-item');
+            if (timelineItems.length === 0) return;
+
+            let csvContent = 'Timestamp,Level,Tag,Message\n';
+            timelineItems.forEach(item => {
+                const timestamp = item.querySelector('.timeline-time').textContent;
+                const level = item.querySelector('.timeline-level').textContent;
+                const content = item.querySelector('.timeline-content').textContent;
+                const [tag, ...messageParts] = content.split(': ');
+                const message = messageParts.join(': ').replace(/"/g, '""');
+                csvContent += `"${timestamp}","${level}","${tag}","${message}"\n`;
+            });
+
+            const blob = new Blob([csvContent], { type: 'text/csv' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `timeline-${new Date().toISOString().slice(0, 10)}.csv`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        });
+
+        logInput.addEventListener('input', saveState); // Save state on input change
+
+        // Apply theme and receive toolId from parent
+        window.addEventListener('message', (event) => {
+            if (event.data.type === 'themeChange') {
+                document.documentElement.setAttribute('data-theme', event.data.theme);
+            } else if (event.data.type === 'toolId') {
+                currentToolId = event.data.toolId;
+                loadState(); // Load state once toolId is received
+            }
+        });
+        // Request initial theme and toolId on load
+        window.parent.postMessage({ type: 'requestTheme' }, '*');
+        window.parent.postMessage({ type: 'requestToolId' }, '*');
+    </script>
+</body>
+</html>

@@ -1,0 +1,980 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GitHub Integration</title>
+    <style>
+        body { font-family: sans-serif; padding: 20px; background-color: var(--bg-color); color: var(--text-color); margin: 0; }
+        h2 { color: var(--text-color); margin-bottom: 15px; }
+        .github-layout { display: grid; grid-template-columns: 350px 1fr; gap: 20px; height: calc(100vh - 100px); }
+        .sidebar { background-color: var(--input-bg); border: 1px solid var(--border-color); border-radius: 8px; padding: 16px; overflow-y: auto; }
+        .main-panel { background-color: var(--input-bg); border: 1px solid var(--border-color); border-radius: 8px; padding: 16px; overflow-y: auto; }
+        .section { margin-bottom: 24px; }
+        .section h3 { margin-bottom: 12px; font-size: 1.1em; color: var(--text-color); }
+        .config-status { padding: 12px; border-radius: 6px; margin-bottom: 16px; text-align: center; font-weight: bold; }
+        .status-connected { background-color: rgba(152, 195, 121, 0.2); border: 1px solid #98c379; color: #98c379; }
+        .status-disconnected { background-color: rgba(224, 108, 117, 0.2); border: 1px solid #e06c75; color: #e06c75; }
+        .form-group { margin-bottom: 16px; }
+        .form-group label { display: block; margin-bottom: 4px; font-weight: bold; }
+        .form-group input, .form-group textarea, .form-group select { width: 100%; padding: 8px; border: 1px solid var(--border-color); border-radius: 4px; background-color: var(--bg-color); color: var(--text-color); }
+        .form-group textarea { height: 80px; resize: vertical; }
+        .btn { padding: 8px 16px; border: 1px solid var(--border-color); background-color: var(--button-bg); color: var(--button-text); border-radius: 5px; cursor: pointer; margin-right: 8px; margin-bottom: 8px; }
+        .btn:hover { opacity: 0.8; }
+        .btn-primary { background-color: #61afef; color: white; border-color: #61afef; }
+        .btn-success { background-color: #98c379; color: white; border-color: #98c379; }
+        .btn-warning { background-color: #e5c07b; color: black; border-color: #e5c07b; }
+        .btn-danger { background-color: #e06c75; color: white; border-color: #e06c75; }
+        .issue-item { padding: 12px; margin-bottom: 8px; border: 1px solid var(--border-color); border-radius: 6px; cursor: pointer; transition: all 0.2s; }
+        .issue-item:hover { background-color: rgba(97, 175, 239, 0.1); }
+        .issue-item.selected { background-color: rgba(97, 175, 239, 0.2); border-color: #61afef; }
+        .issue-number { font-weight: bold; color: #61afef; }
+        .issue-title { font-weight: bold; margin: 4px 0; }
+        .issue-meta { font-size: 0.9em; opacity: 0.8; }
+        .issue-labels { margin-top: 8px; }
+        .label { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 0.8em; font-weight: bold; margin-right: 4px; margin-bottom: 4px; }
+        .label-bug { background-color: #e06c75; color: white; }
+        .label-enhancement { background-color: #61afef; color: white; }
+        .label-question { background-color: #c678dd; color: white; }
+        .label-auto-generated { background-color: #e5c07b; color: black; }
+        .template-item { padding: 10px; margin-bottom: 8px; border: 1px solid var(--border-color); border-radius: 4px; cursor: pointer; }
+        .template-item:hover { background-color: rgba(97, 175, 239, 0.1); }
+        .template-item.selected { background-color: rgba(97, 175, 239, 0.2); border-color: #61afef; }
+        .template-name { font-weight: bold; }
+        .template-description { font-size: 0.9em; opacity: 0.8; margin-top: 4px; }
+        .template-category { display: inline-block; padding: 2px 6px; border-radius: 10px; font-size: 0.7em; font-weight: bold; margin-top: 4px; }
+        .category-crash { background-color: #e06c75; color: white; }
+        .category-performance { background-color: #e5c07b; color: black; }
+        .category-bug { background-color: #61afef; color: white; }
+        .loading { text-align: center; padding: 20px; opacity: 0.7; }
+        .error-message { background-color: rgba(224, 108, 117, 0.1); border: 1px solid #e06c75; border-radius: 6px; padding: 12px; margin: 16px 0; color: #e06c75; }
+        .success-message { background-color: rgba(152, 195, 121, 0.1); border: 1px solid #98c379; border-radius: 6px; padding: 12px; margin: 16px 0; color: #98c379; }
+        .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0, 0, 0, 0.5); z-index: 1000; }
+        .modal.show { display: flex; align-items: center; justify-content: center; }
+        .modal-content { background-color: var(--input-bg); border-radius: 8px; padding: 24px; max-width: 600px; width: 90%; max-height: 80vh; overflow-y: auto; }
+        .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+        .modal-title { font-size: 1.2em; font-weight: bold; }
+        .modal-close { background: none; border: none; font-size: 1.5em; cursor: pointer; color: var(--text-color); }
+        .tabs { display: flex; border-bottom: 1px solid var(--border-color); margin-bottom: 16px; }
+        .tab { padding: 8px 16px; cursor: pointer; border-bottom: 2px solid transparent; }
+        .tab.active { border-bottom-color: #61afef; color: #61afef; font-weight: bold; }
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+        @media (max-width: 1200px) {
+            .github-layout { grid-template-columns: 1fr; grid-template-rows: auto 1fr; }
+        }
+    </style>
+</head>
+<body>
+    <h2>GitHub Integration 🐙</h2>
+    
+    <div class="github-layout">
+        <!-- Sidebar -->
+        <div class="sidebar">
+            <div class="section">
+                <h3>Configuration</h3>
+                <div id="config-status" class="config-status status-disconnected">
+                    Not Connected
+                </div>
+                <button class="btn btn-primary" onclick="showConfigModal()">⚙️ Configure</button>
+                <button class="btn" id="test-connection-btn" disabled>🔍 Test Connection</button>
+            </div>
+            
+            <div class="section">
+                <h3>Issue Templates</h3>
+                <div id="templates-list">
+                    <div class="loading">Loading templates...</div>
+                </div>
+                <button class="btn btn-success" onclick="showTemplateModal()">+ New Template</button>
+            </div>
+            
+            <div class="section">
+                <h3>Quick Actions</h3>
+                <button class="btn btn-primary" onclick="showCreateIssueModal()" id="create-issue-btn" disabled>🐛 Create Issue</button>
+                <button class="btn btn-warning" onclick="autoCreateFromCrash()" id="auto-crash-btn" disabled>💥 Auto-Create from Crash</button>
+                <button class="btn" onclick="syncIssues()" id="sync-issues-btn" disabled>🔄 Sync Issues</button>
+            </div>
+        </div>
+        
+        <!-- Main Panel -->
+        <div class="main-panel">
+            <div class="tabs">
+                <div class="tab active" onclick="switchTab('issues')">Issues</div>
+                <div class="tab" onclick="switchTab('analytics')">Analytics</div>
+                <div class="tab" onclick="switchTab('automation')">Automation</div>
+            </div>
+            
+            <div id="issues-tab" class="tab-content active">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+                    <h3>Repository Issues</h3>
+                    <div>
+                        <select id="issue-filter">
+                            <option value="open">Open Issues</option>
+                            <option value="closed">Closed Issues</option>
+                            <option value="all">All Issues</option>
+                        </select>
+                        <button class="btn" onclick="loadIssues()">🔄 Refresh</button>
+                    </div>
+                </div>
+                <div id="issues-list">
+                    <div class="loading">Connect to GitHub to view issues</div>
+                </div>
+            </div>
+            
+            <div id="analytics-tab" class="tab-content">
+                <h3>Issue Analytics</h3>
+                <div id="analytics-content">
+                    <div class="loading">Connect to GitHub to view analytics</div>
+                </div>
+            </div>
+            
+            <div id="automation-tab" class="tab-content">
+                <h3>Automation Rules</h3>
+                <div id="automation-content">
+                    <div class="loading">Configure automation rules</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Configuration Modal -->
+    <div id="config-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div class="modal-title">GitHub Configuration</div>
+                <button class="modal-close" onclick="hideConfigModal()">&times;</button>
+            </div>
+            <form id="config-form">
+                <div class="form-group">
+                    <label for="github-token">Personal Access Token</label>
+                    <input type="password" id="github-token" placeholder="ghp_xxxxxxxxxxxxxxxxxxxx" required>
+                    <small>Generate a token at: <a href="https://github.com/settings/tokens" target="_blank">GitHub Settings</a></small>
+                </div>
+                <div class="form-group">
+                    <label for="github-owner">Repository Owner</label>
+                    <input type="text" id="github-owner" placeholder="username or organization" required>
+                </div>
+                <div class="form-group">
+                    <label for="github-repo">Repository Name</label>
+                    <input type="text" id="github-repo" placeholder="repository-name" required>
+                </div>
+                <div class="form-group">
+                    <label for="github-api-url">API URL</label>
+                    <input type="url" id="github-api-url" value="https://api.github.com" required>
+                </div>
+                <div style="text-align: right;">
+                    <button type="button" class="btn" onclick="hideConfigModal()">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Save Configuration</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Create Issue Modal -->
+    <div id="create-issue-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div class="modal-title">Create GitHub Issue</div>
+                <button class="modal-close" onclick="hideCreateIssueModal()">&times;</button>
+            </div>
+            <form id="create-issue-form">
+                <div class="form-group">
+                    <label for="issue-title">Title</label>
+                    <input type="text" id="issue-title" required>
+                </div>
+                <div class="form-group">
+                    <label for="issue-body">Description</label>
+                    <textarea id="issue-body" placeholder="Describe the issue..."></textarea>
+                </div>
+                <div class="form-group">
+                    <label for="issue-labels">Labels (comma-separated)</label>
+                    <input type="text" id="issue-labels" placeholder="bug, high-priority">
+                </div>
+                <div class="form-group">
+                    <label for="issue-assignees">Assignees (comma-separated usernames)</label>
+                    <input type="text" id="issue-assignees" placeholder="username1, username2">
+                </div>
+                <div style="text-align: right;">
+                    <button type="button" class="btn" onclick="hideCreateIssueModal()">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Create Issue</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Template Modal -->
+    <div id="template-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div class="modal-title">Create Issue Template</div>
+                <button class="modal-close" onclick="hideTemplateModal()">&times;</button>
+            </div>
+            <form id="template-form">
+                <div class="form-group">
+                    <label for="template-name">Template Name</label>
+                    <input type="text" id="template-name" required>
+                </div>
+                <div class="form-group">
+                    <label for="template-category">Category</label>
+                    <select id="template-category" required>
+                        <option value="crash">Crash Report</option>
+                        <option value="performance">Performance Issue</option>
+                        <option value="bug">Bug Report</option>
+                        <option value="feature">Feature Request</option>
+                        <option value="question">Question</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="template-title">Issue Title Template</label>
+                    <input type="text" id="template-title" placeholder="🚨 {{issue_type}} - {{device_model}}" required>
+                </div>
+                <div class="form-group">
+                    <label for="template-body">Issue Body Template</label>
+                    <textarea id="template-body" placeholder="Use {{variable}} for dynamic content" required></textarea>
+                </div>
+                <div class="form-group">
+                    <label for="template-labels">Default Labels</label>
+                    <input type="text" id="template-labels" placeholder="bug, auto-generated">
+                </div>
+                <div class="form-group">
+                    <label>
+                        <input type="checkbox" id="template-auto-create"> Enable auto-creation
+                    </label>
+                </div>
+                <div style="text-align: right;">
+                    <button type="button" class="btn" onclick="hideTemplateModal()">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Create Template</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script type="module">
+        // Mock GitHub Integration Service
+        class MockGitHubIntegrationService {
+            constructor() {
+                this.config = null;
+                this.issues = [];
+                this.templates = new Map();
+                this.eventListeners = new Map();
+                this.loadDefaultTemplates();
+            }
+
+            loadDefaultTemplates() {
+                const defaultTemplates = [
+                    {
+                        id: 'crash_template',
+                        name: 'Application Crash',
+                        title: '🚨 Application Crash - {{crash_type}}',
+                        body: `## Crash Report
+
+**Crash Type:** {{crash_type}}
+**Timestamp:** {{timestamp}}
+**Device:** {{device_model}} (Android {{android_version}})
+**Session:** {{session_id}}
+
+### Stack Trace
+\`\`\`
+{{stack_trace}}
+\`\`\`
+
+### Device Information
+- **Model:** {{device_model}}
+- **Android Version:** {{android_version}}
+- **Memory:** {{memory_info}}
+
+### Reproduction Steps
+1. {{reproduction_steps}}
+
+---
+*This issue was automatically created by Signage DevHub*`,
+                        labels: ['bug', 'crash', 'auto-generated'],
+                        category: 'crash',
+                        priority: 'critical',
+                        autoCreate: true
+                    },
+                    {
+                        id: 'performance_template',
+                        name: 'Performance Issue',
+                        title: '⚡ Performance Issue - {{issue_type}}',
+                        body: `## Performance Issue Report
+
+**Issue Type:** {{issue_type}}
+**Severity:** {{severity}}
+**Device:** {{device_model}}
+
+### Performance Metrics
+- **CPU Usage:** {{cpu_usage}}%
+- **Memory Usage:** {{memory_usage}}MB
+- **Temperature:** {{temperature}}°C
+
+### Recommendations
+{{recommendations}}
+
+---
+*This issue was automatically created by Signage DevHub*`,
+                        labels: ['performance', 'optimization', 'auto-generated'],
+                        category: 'performance',
+                        priority: 'medium',
+                        autoCreate: false
+                    }
+                ];
+
+                defaultTemplates.forEach(template => {
+                    this.templates.set(template.id, template);
+                });
+            }
+
+            async configure(config) {
+                // Mock configuration validation
+                if (config.token && config.owner && config.repo) {
+                    this.config = config;
+                    this.loadMockIssues();
+                    this.emit('configurationChanged', { config: { ...config, token: '***' } });
+                    return true;
+                }
+                return false;
+            }
+
+            loadMockIssues() {
+                this.issues = [
+                    {
+                        id: 1,
+                        number: 123,
+                        title: 'MediaPlayer crashes on H.265 video playback',
+                        body: 'Application consistently crashes when attempting to play H.265 encoded videos...',
+                        state: 'open',
+                        labels: [
+                            { name: 'bug', color: 'e06c75' },
+                            { name: 'crash', color: 'e06c75' },
+                            { name: 'auto-generated', color: 'e5c07b' }
+                        ],
+                        created_at: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
+                        updated_at: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString(),
+                        html_url: 'https://github.com/example/repo/issues/123',
+                        user: { login: 'signage-devhub', avatar_url: '/placeholder.svg?height=32&width=32' }
+                    },
+                    {
+                        id: 2,
+                        number: 124,
+                        title: 'High CPU usage during video playback',
+                        body: 'CPU usage spikes to 90%+ when playing multiple video streams simultaneously...',
+                        state: 'open',
+                        labels: [
+                            { name: 'performance', color: 'e5c07b' },
+                            { name: 'optimization', color: '61afef' }
+                        ],
+                        created_at: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString(),
+                        updated_at: new Date(Date.now() - 12 * 60 * 60 * 1000).toISOString(),
+                        html_url: 'https://github.com/example/repo/issues/124',
+                        user: { login: 'developer1', avatar_url: '/placeholder.svg?height=32&width=32' }
+                    },
+                    {
+                        id: 3,
+                        number: 125,
+                        title: 'Network timeout errors in poor connectivity',
+                        body: 'Application fails to handle network timeouts gracefully in low bandwidth scenarios...',
+                        state: 'closed',
+                        labels: [
+                            { name: 'network', color: '98c379' },
+                            { name: 'enhancement', color: '61afef' }
+                        ],
+                        created_at: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString(),
+                        updated_at: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(),
+                        html_url: 'https://github.com/example/repo/issues/125',
+                        user: { login: 'qa-tester', avatar_url: '/placeholder.svg?height=32&width=32' }
+                    }
+                ];
+            }
+
+            async getIssues(state = 'open') {
+                if (!this.config) throw new Error('GitHub not configured');
+                
+                return this.issues.filter(issue => 
+                    state === 'all' || issue.state === state
+                );
+            }
+
+            async createCustomIssue(title, body, labels = [], assignees = []) {
+                if (!this.config) throw new Error('GitHub not configured');
+
+                const newIssue = {
+                    id: Date.now(),
+                    number: Math.max(...this.issues.map(i => i.number)) + 1,
+                    title,
+                    body,
+                    state: 'open',
+                    labels: labels.map(label => ({ name: label, color: '61afef' })),
+                    created_at: new Date().toISOString(),
+                    updated_at: new Date().toISOString(),
+                    html_url: `https://github.com/${this.config.owner}/${this.config.repo}/issues/${Math.max(...this.issues.map(i => i.number)) + 1}`,
+                    user: { login: 'current-user', avatar_url: '/placeholder.svg?height=32&width=32' }
+                };
+
+                this.issues.unshift(newIssue);
+                this.emit('issueCreated', { issue: newIssue });
+                return newIssue;
+            }
+
+            async createIssueFromCrash(crashData) {
+                const template = this.templates.get('crash_template');
+                if (!template) throw new Error('Crash template not found');
+
+                const variables = {
+                    crash_type: crashData.type || 'Unknown',
+                    timestamp: new Date().toLocaleString(),
+                    device_model: crashData.deviceModel || 'Unknown',
+                    android_version: crashData.androidVersion || 'Unknown',
+                    session_id: crashData.sessionId || 'N/A',
+                    stack_trace: crashData.stackTrace || 'No stack trace available',
+                    memory_info: crashData.memoryInfo || 'Unknown',
+                    reproduction_steps: 'Steps to be filled by developer'
+                };
+
+                const title = this.populateTemplate(template.title, variables);
+                const body = this.populateTemplate(template.body, variables);
+
+                return await this.createCustomIssue(title, body, template.labels);
+            }
+
+            populateTemplate(template, variables) {
+                let result = template;
+                Object.entries(variables).forEach(([key, value]) => {
+                    const placeholder = `{{${key}}}`;
+                    result = result.replace(new RegExp(placeholder, 'g'), value);
+                });
+                return result;
+            }
+
+            getIssueTemplates() {
+                return Array.from(this.templates.values());
+            }
+
+            async createIssueTemplate(template) {
+                const newTemplate = {
+                    id: `template_${Date.now()}`,
+                    ...template
+                };
+                this.templates.set(newTemplate.id, newTemplate);
+                return newTemplate;
+            }
+
+            isConfigured() {
+                return this.config !== null;
+            }
+
+            getConfig() {
+                if (!this.config) return null;
+                return {
+                    owner: this.config.owner,
+                    repo: this.config.repo,
+                    apiUrl: this.config.apiUrl
+                };
+            }
+
+            on(event, callback) {
+                if (!this.eventListeners.has(event)) {
+                    this.eventListeners.set(event, []);
+                }
+                this.eventListeners.get(event).push(callback);
+            }
+
+            emit(event, data) {
+                const listeners = this.eventListeners.get(event) || [];
+                listeners.forEach(callback => callback(data));
+            }
+        }
+
+        // Initialize service
+        const githubService = new MockGitHubIntegrationService();
+
+        // UI State
+        let selectedIssue = null;
+        let selectedTemplate = null;
+        let currentToolId = '';
+
+        // Initialize UI
+        async function initializeUI() {
+            updateConfigStatus();
+            await loadTemplates();
+            setupEventListeners();
+            
+            if (githubService.isConfigured()) {
+                await loadIssues();
+                updateAnalytics();
+            }
+        }
+
+        function updateConfigStatus() {
+            const statusElement = document.getElementById('config-status');
+            const testBtn = document.getElementById('test-connection-btn');
+            const createBtn = document.getElementById('create-issue-btn');
+            const crashBtn = document.getElementById('auto-crash-btn');
+            const syncBtn = document.getElementById('sync-issues-btn');
+
+            if (githubService.isConfigured()) {
+                const config = githubService.getConfig();
+                statusElement.textContent = `Connected to ${config.owner}/${config.repo}`;
+                statusElement.className = 'config-status status-connected';
+                testBtn.disabled = false;
+                createBtn.disabled = false;
+                crashBtn.disabled = false;
+                syncBtn.disabled = false;
+            } else {
+                statusElement.textContent = 'Not Connected';
+                statusElement.className = 'config-status status-disconnected';
+                testBtn.disabled = true;
+                createBtn.disabled = true;
+                crashBtn.disabled = true;
+                syncBtn.disabled = true;
+            }
+        }
+
+        async function loadTemplates() {
+            const templates = githubService.getIssueTemplates();
+            const container = document.getElementById('templates-list');
+
+            if (templates.length === 0) {
+                container.innerHTML = '<div class="loading">No templates found</div>';
+                return;
+            }
+
+            container.innerHTML = templates.map(template => `
+                <div class="template-item" data-template-id="${template.id}">
+                    <div class="template-name">${template.name}</div>
+                    <div class="template-description">${template.body.substring(0, 100)}...</div>
+                    <span class="template-category category-${template.category}">${template.category.toUpperCase()}</span>
+                    ${template.autoCreate ? '<span style="font-size: 0.8em; color: #98c379; margin-left: 8px;">AUTO</span>' : ''}
+                </div>
+            `).join('');
+
+            // Add click listeners
+            container.querySelectorAll('.template-item').forEach(item => {
+                item.addEventListener('click', () => {
+                    const templateId = item.dataset.templateId;
+                    selectTemplate(templateId);
+                });
+            });
+        }
+
+        function selectTemplate(templateId) {
+            const templates = githubService.getIssueTemplates();
+            selectedTemplate = templates.find(t => t.id === templateId);
+
+            document.querySelectorAll('.template-item').forEach(item => {
+                item.classList.toggle('selected', item.dataset.templateId === templateId);
+            });
+        }
+
+        async function loadIssues() {
+            const filter = document.getElementById('issue-filter').value;
+            const container = document.getElementById('issues-list');
+
+            try {
+                container.innerHTML = '<div class="loading">Loading issues...</div>';
+                const issues = await githubService.getIssues(filter);
+
+                if (issues.length === 0) {
+                    container.innerHTML = '<div class="loading">No issues found</div>';
+                    return;
+                }
+
+                container.innerHTML = issues.map(issue => `
+                    <div class="issue-item" data-issue-id="${issue.id}">
+                        <div class="issue-number">#${issue.number}</div>
+                        <div class="issue-title">${issue.title}</div>
+                        <div class="issue-meta">
+                            Opened ${new Date(issue.created_at).toLocaleDateString()} by ${issue.user.login}
+                            ${issue.state === 'closed' ? `• Closed ${new Date(issue.updated_at).toLocaleDateString()}` : ''}
+                        </div>
+                        <div class="issue-labels">
+                            ${issue.labels.map(label => `
+                                <span class="label label-${label.name}" style="background-color: #${label.color};">
+                                    ${label.name}
+                                </span>
+                            `).join('')}
+                        </div>
+                    </div>
+                `).join('');
+
+                // Add click listeners
+                container.querySelectorAll('.issue-item').forEach(item => {
+                    item.addEventListener('click', () => {
+                        const issueId = parseInt(item.dataset.issueId);
+                        selectIssue(issueId);
+                    });
+                });
+
+            } catch (error) {
+                container.innerHTML = `<div class="error-message">Failed to load issues: ${error.message}</div>`;
+            }
+        }
+
+        function selectIssue(issueId) {
+            selectedIssue = githubService.issues.find(i => i.id === issueId);
+
+            document.querySelectorAll('.issue-item').forEach(item => {
+                item.classList.toggle('selected', parseInt(item.dataset.issueId) === issueId);
+            });
+        }
+
+        function updateAnalytics() {
+            const container = document.getElementById('analytics-content');
+            
+            if (!githubService.isConfigured()) {
+                container.innerHTML = '<div class="loading">Connect to GitHub to view analytics</div>';
+                return;
+            }
+
+            const issues = githubService.issues;
+            const openIssues = issues.filter(i => i.state === 'open').length;
+            const closedIssues = issues.filter(i => i.state === 'closed').length;
+            const autoGenerated = issues.filter(i => i.labels.some(l => l.name === 'auto-generated')).length;
+
+            // Count labels
+            const labelCounts = {};
+            issues.forEach(issue => {
+                issue.labels.forEach(label => {
+                    labelCounts[label.name] = (labelCounts[label.name] || 0) + 1;
+                });
+            });
+
+            container.innerHTML = `
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 24px;">
+                    <div style="background-color: var(--bg-color); padding: 16px; border-radius: 8px; text-align: center;">
+                        <div style="font-size: 2em; font-weight: bold; color: #e06c75;">${openIssues}</div>
+                        <div>Open Issues</div>
+                    </div>
+                    <div style="background-color: var(--bg-color); padding: 16px; border-radius: 8px; text-align: center;">
+                        <div style="font-size: 2em; font-weight: bold; color: #98c379;">${closedIssues}</div>
+                        <div>Closed Issues</div>
+                    </div>
+                    <div style="background-color: var(--bg-color); padding: 16px; border-radius: 8px; text-align: center;">
+                        <div style="font-size: 2em; font-weight: bold; color: #e5c07b;">${autoGenerated}</div>
+                        <div>Auto-Generated</div>
+                    </div>
+                    <div style="background-color: var(--bg-color); padding: 16px; border-radius: 8px; text-align: center;">
+                        <div style="font-size: 2em; font-weight: bold; color: #61afef;">${issues.length}</div>
+                        <div>Total Issues</div>
+                    </div>
+                </div>
+
+                <div class="section">
+                    <h4>Label Distribution</h4>
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px;">
+                        ${Object.entries(labelCounts).map(([label, count]) => `
+                            <div style="display: flex; justify-content: space-between; padding: 8px; background-color: var(--bg-color); border-radius: 4px;">
+                                <span>${label}</span>
+                                <span style="font-weight: bold;">${count}</span>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+
+                <div class="section">
+                    <h4>Recent Activity</h4>
+                    <div>
+                        ${issues.slice(0, 5).map(issue => `
+                            <div style="padding: 8px; margin-bottom: 4px; background-color: var(--bg-color); border-radius: 4px;">
+                                <strong>#${issue.number}</strong> ${issue.title}
+                                <div style="font-size: 0.9em; opacity: 0.8;">
+                                    ${issue.state === 'open' ? 'Opened' : 'Closed'} ${new Date(issue.updated_at).toLocaleDateString()}
+                                </div>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+            `;
+        }
+
+        function setupEventListeners() {
+            // Configuration form
+            document.getElementById('config-form').addEventListener('submit', async (e) => {
+                e.preventDefault();
+                
+                const config = {
+                    token: document.getElementById('github-token').value,
+                    owner: document.getElementById('github-owner').value,
+                    repo: document.getElementById('github-repo').value,
+                    apiUrl: document.getElementById('github-api-url').value
+                };
+
+                try {
+                    const success = await githubService.configure(config);
+                    if (success) {
+                        hideConfigModal();
+                        updateConfigStatus();
+                        await loadIssues();
+                        updateAnalytics();
+                        showSuccess('GitHub configuration saved successfully');
+                    } else {
+                        showError('Invalid configuration. Please check your settings.');
+                    }
+                } catch (error) {
+                    showError('Configuration failed: ' + error.message);
+                }
+            });
+
+            // Create issue form
+            document.getElementById('create-issue-form').addEventListener('submit', async (e) => {
+                e.preventDefault();
+                
+                const title = document.getElementById('issue-title').value;
+                const body = document.getElementById('issue-body').value;
+                const labels = document.getElementById('issue-labels').value.split(',').map(l => l.trim()).filter(l => l);
+                const assignees = document.getElementById('issue-assignees').value.split(',').map(a => a.trim()).filter(a => a);
+
+                try {
+                    const issue = await githubService.createCustomIssue(title, body, labels, assignees);
+                    hideCreateIssueModal();
+                    await loadIssues();
+                    updateAnalytics();
+                    showSuccess(`Issue #${issue.number} created successfully`);
+                } catch (error) {
+                    showError('Failed to create issue: ' + error.message);
+                }
+            });
+
+            // Template form
+            document.getElementById('template-form').addEventListener('submit', async (e) => {
+                e.preventDefault();
+                
+                const template = {
+                    name: document.getElementById('template-name').value,
+                    category: document.getElementById('template-category').value,
+                    title: document.getElementById('template-title').value,
+                    body: document.getElementById('template-body').value,
+                    labels: document.getElementById('template-labels').value.split(',').map(l => l.trim()).filter(l => l),
+                    autoCreate: document.getElementById('template-auto-create').checked,
+                    priority: 'medium'
+                };
+
+                try {
+                    await githubService.createIssueTemplate(template);
+                    hideTemplateModal();
+                    await loadTemplates();
+                    showSuccess('Template created successfully');
+                } catch (error) {
+                    showError('Failed to create template: ' + error.message);
+                }
+            });
+
+            // Issue filter
+            document.getElementById('issue-filter').addEventListener('change', loadIssues);
+
+            // Service event listeners
+            githubService.on('configurationChanged', (data) => {
+                console.log('GitHub configured:', data.config);
+            });
+
+            githubService.on('issueCreated', (data) => {
+                console.log('Issue created:', data.issue);
+            });
+        }
+
+        // Tab switching
+        function switchTab(tabName) {
+            document.querySelectorAll('.tab').forEach(tab => tab.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+            
+            document.querySelector(`.tab:nth-child(${tabName === 'issues' ? 1 : tabName === 'analytics' ? 2 : 3})`).classList.add('active');
+            document.getElementById(`${tabName}-tab`).classList.add('active');
+
+            if (tabName === 'analytics') {
+                updateAnalytics();
+            } else if (tabName === 'automation') {
+                updateAutomation();
+            }
+        }
+
+        function updateAutomation() {
+            const container = document.getElementById('automation-content');
+            const templates = githubService.getIssueTemplates();
+            const autoTemplates = templates.filter(t => t.autoCreate);
+
+            container.innerHTML = `
+                <div class="section">
+                    <h4>Auto-Creation Rules</h4>
+                    <p>Templates that automatically create issues based on conditions:</p>
+                    
+                    ${autoTemplates.length === 0 ? '<div class="loading">No automation rules configured</div>' : 
+                        autoTemplates.map(template => `
+                            <div style="padding: 12px; margin-bottom: 8px; border: 1px solid var(--border-color); border-radius: 6px;">
+                                <div style="font-weight: bold;">${template.name}</div>
+                                <div style="font-size: 0.9em; opacity: 0.8; margin-top: 4px;">
+                                    Category: ${template.category} • Priority: ${template.priority}
+                                </div>
+                                <div style="margin-top: 8px;">
+                                    <span class="label label-auto-generated">AUTO-CREATE</span>
+                                    ${template.labels.map(label => `<span class="label">${label}</span>`).join('')}
+                                </div>
+                            </div>
+                        `).join('')
+                    }
+                </div>
+
+                <div class="section">
+                    <h4>Trigger Conditions</h4>
+                    <div style="background-color: var(--bg-color); padding: 16px; border-radius: 8px;">
+                        <ul style="margin: 0; padding-left: 20px;">
+                            <li><strong>Crash Detection:</strong> Automatically creates issues when application crashes are detected</li>
+                            <li><strong>Performance Thresholds:</strong> Creates issues when CPU > 80%, Memory > 85%, or Temperature > 70°C</li>
+                            <li><strong>Error Patterns:</strong> Triggers on specific error patterns in logs</li>
+                            <li><strong>Device-Specific:</strong> Creates issues for specific device types or Android versions</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <div class="section">
+                    <h4>Integration Status</h4>
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px;">
+                        <div style="padding: 12px; background-color: var(--bg-color); border-radius: 6px; text-align: center;">
+                            <div style="font-size: 1.5em; color: #98c379;">✓</div>
+                            <div>GitHub API</div>
+                        </div>
+                        <div style="padding: 12px; background-color: var(--bg-color); border-radius: 6px; text-align: center;">
+                            <div style="font-size: 1.5em; color: #98c379;">✓</div>
+                            <div>Issue Templates</div>
+                        </div>
+                        <div style="padding: 12px; background-color: var(--bg-color); border-radius: 6px; text-align: center;">
+                            <div style="font-size: 1.5em; color: #98c379;">✓</div>
+                            <div>Auto-Creation</div>
+                        </div>
+                        <div style="padding: 12px; background-color: var(--bg-color); border-radius: 6px; text-align: center;">
+                            <div style="font-size: 1.5em; color: #e5c07b;">⚠</div>
+                            <div>Webhooks</div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        // Global functions for buttons
+        window.showConfigModal = () => {
+            document.getElementById('config-modal').classList.add('show');
+        };
+
+        window.hideConfigModal = () => {
+            document.getElementById('config-modal').classList.remove('show');
+        };
+
+        window.showCreateIssueModal = () => {
+            document.getElementById('create-issue-modal').classList.add('show');
+        };
+
+        window.hideCreateIssueModal = () => {
+            document.getElementById('create-issue-modal').classList.remove('show');
+            document.getElementById('create-issue-form').reset();
+        };
+
+        window.showTemplateModal = () => {
+            document.getElementById('template-modal').classList.add('show');
+        };
+
+        window.hideTemplateModal = () => {
+            document.getElementById('template-modal').classList.remove('show');
+            document.getElementById('template-form').reset();
+        };
+
+        window.switchTab = switchTab;
+
+        window.loadIssues = loadIssues;
+
+        window.syncIssues = async () => {
+            try {
+                await loadIssues();
+                updateAnalytics();
+                showSuccess('Issues synchronized successfully');
+            } catch (error) {
+                showError('Failed to sync issues: ' + error.message);
+            }
+        };
+
+        window.autoCreateFromCrash = async () => {
+            try {
+                const mockCrashData = {
+                    type: 'MediaPlayer Crash',
+                    deviceModel: 'Samsung SM-T870',
+                    androidVersion: '11',
+                    sessionId: 'session_001',
+                    stackTrace: 'java.lang.RuntimeException: MediaPlayer error\n    at com.example.MediaService.playVideo(MediaService.java:123)',
+                    memoryInfo: '512MB available'
+                };
+
+                const issue = await githubService.createIssueFromCrash(mockCrashData);
+                await loadIssues();
+                updateAnalytics();
+                showSuccess(`Crash issue #${issue.number} created automatically`);
+            } catch (error) {
+                showError('Failed to create crash issue: ' + error.message);
+            }
+        };
+
+        // Utility functions
+        function showError(message) {
+            console.error(message);
+            // In a real implementation, this would show a proper error notification
+            const errorDiv = document.createElement('div');
+            errorDiv.className = 'error-message';
+            errorDiv.textContent = message;
+            document.body.appendChild(errorDiv);
+            setTimeout(() => errorDiv.remove(), 5000);
+        }
+
+        function showSuccess(message) {
+            console.log(message);
+            // In a real implementation, this would show a proper success notification
+            const successDiv = document.createElement('div');
+            successDiv.className = 'success-message';
+            successDiv.textContent = message;
+            document.body.appendChild(successDiv);
+            setTimeout(() => successDiv.remove(), 3000);
+        }
+
+        function saveState() {
+            if (currentToolId) {
+                const state = {
+                    selectedIssueId: selectedIssue?.id,
+                    selectedTemplateId: selectedTemplate?.id,
+                    activeTab: document.querySelector('.tab.active')?.textContent?.toLowerCase()
+                };
+                localStorage.setItem(`tool-state-${currentToolId}`, JSON.stringify(state));
+            }
+        }
+
+        function loadState() {
+            if (currentToolId) {
+                const savedState = localStorage.getItem(`tool-state-${currentToolId}`);
+                if (savedState) {
+                    const state = JSON.parse(savedState);
+                    if (state.activeTab) {
+                        switchTab(state.activeTab);
+                    }
+                    if (state.selectedIssueId) {
+                        selectIssue(state.selectedIssueId);
+                    }
+                    if (state.selectedTemplateId) {
+                        selectTemplate(state.selectedTemplateId);
+                    }
+                }
+            }
+        }
+
+        // Apply theme and receive toolId from parent
+        window.addEventListener('message', (event) => {
+            if (event.data.type === 'themeChange') {
+                document.documentElement.setAttribute('data-theme', event.data.theme);
+            } else if (event.data.type === 'toolId') {
+                currentToolId = event.data.toolId;
+                loadState();
+            }
+        });
+
+        window.parent.postMessage({ type: 'requestTheme' }, '*');
+        window.parent.postMessage({ type: 'requestToolId' }, '*');
+
+        // Initialize the application
+        initializeUI();
+    </script>
+</body>
+</html>

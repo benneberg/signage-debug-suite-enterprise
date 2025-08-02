@@ -1,0 +1,302 @@
+/* Basic Reset */
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+  line-height: 1.6;
+  color: var(--text-color);
+  background-color: var(--bg-color);
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+/* Theme Variables */
+:root {
+  --bg-color: #f4f7f6;
+  --header-bg: #e0e4e3;
+  --text-color: #333;
+  --border-color: #ccc;
+  --input-bg: #fff;
+  --button-bg: #007bff;
+  --button-text: #fff;
+  --welcome-bg: #e9ecef;
+  --welcome-border: #dee2e6;
+  --panel-bg: #f0f3f2;
+  --panel-border: #d0d3d2;
+}
+
+[data-theme="dark"] {
+  --bg-color: #282c34;
+  --header-bg: #21252b;
+  --text-color: #abb2bf;
+  --border-color: #3e4451;
+  --input-bg: #3e4451;
+  --button-bg: #61afef;
+  --button-text: #21252b;
+  --welcome-bg: #3e4451;
+  --welcome-border: #4a505d;
+  --panel-bg: #3e4451;
+  --panel-border: #4a505d;
+}
+
+#app {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+.app-header {
+  background-color: var(--header-bg);
+  padding: 15px 20px;
+  border-bottom: 1px solid var(--border-color);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 15px;
+}
+
+.logo {
+  font-size: 1.5em;
+  font-weight: bold;
+  color: var(--text-color);
+}
+
+.tool-selector select,
+.header-actions input[type="search"] {
+  padding: 8px 12px;
+  border: 1px solid var(--border-color);
+  border-radius: 5px;
+  background-color: var(--input-bg);
+  color: var(--text-color);
+  font-size: 1em;
+  min-width: 200px;
+}
+
+.header-actions {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.header-actions button,
+.pin-current-tool-btn {
+  background-color: var(--button-bg);
+  color: var(--button-text);
+  border: none;
+  padding: 8px 12px;
+  border-radius: 5px;
+  cursor: pointer;
+  font-size: 1em;
+  transition: background-color 0.2s ease;
+}
+
+.header-actions button:hover,
+.pin-current-tool-btn:hover {
+  opacity: 0.9;
+}
+
+#pin-to-home-btn {
+  display: none; /* Hidden by default, shown if PWA installable */
+}
+
+.pin-current-tool-btn {
+  margin-left: 10px;
+}
+
+.pinned-tools-container {
+  background-color: var(--panel-bg);
+  border-bottom: 1px solid var(--panel-border);
+  padding: 10px 20px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.pinned-tools-container h3 {
+  font-size: 1em;
+  color: var(--text-color);
+  margin-right: 10px;
+}
+
+.pinned-tools-list {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.pinned-tool-item {
+  background-color: var(--input-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 5px;
+  padding: 5px 10px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+
+.pinned-tool-item:hover {
+  background-color: rgba(0, 123, 255, 0.1);
+}
+
+.pinned-tool-name {
+  color: var(--text-color);
+  font-size: 0.9em;
+}
+
+.unpin-tool-btn {
+  background: none;
+  border: none;
+  color: var(--text-color);
+  cursor: pointer;
+  font-size: 0.8em;
+  padding: 0 3px;
+  line-height: 1;
+  opacity: 0.7;
+  transition: opacity 0.2s ease;
+}
+
+.unpin-tool-btn:hover {
+  opacity: 1;
+  color: #e06c75; /* Red for delete */
+}
+
+.no-pinned-tools {
+  font-style: italic;
+  color: var(--text-color);
+  opacity: 0.7;
+  font-size: 0.9em;
+}
+
+.main-content {
+  flex-grow: 1;
+  padding: 0; /* Remove padding to allow iframe to fill */
+  display: flex; /* Ensure flex container for iframe */
+  justify-content: flex-start; /* Align content to start */
+  align-items: flex-start; /* Align content to start */
+  text-align: center;
+}
+
+.welcome-message {
+  background-color: var(--welcome-bg);
+  border: 1px solid var(--welcome-border);
+  border-radius: 8px;
+  max-width: 600px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+}
+
+.welcome-message h2 {
+  font-size: 2em;
+  margin-bottom: 15px;
+  color: var(--text-color);
+}
+
+.welcome-message p {
+  font-size: 1.1em;
+  color: var(--text-color);
+  margin-bottom: 10px;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .app-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  .tool-selector,
+  .header-actions {
+    width: 100%;
+    justify-content: space-between;
+  }
+  .tool-selector select,
+  .header-actions input[type="search"] {
+    width: 100%;
+  }
+  .pinned-tools-container {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  .pinned-tools-container h3 {
+    margin-bottom: 5px;
+  }
+}
+
+.tool-iframe {
+  width: 100%;
+  height: 100%;
+  border: none;
+  flex-grow: 1; /* Allow iframe to take available space */
+  background-color: var(--bg-color); /* Ensure iframe background matches theme */
+}
+
+/* Adjust welcome message padding when no iframe is loaded */
+.main-content .welcome-message {
+  padding: 30px; /* Restore padding for welcome message */
+  margin: auto; /* Center welcome message */
+}
+
+/* Settings Panel */
+.settings-panel {
+  position: fixed;
+  top: 0;
+  right: -300px; /* Hidden by default */
+  width: 300px;
+  height: 100%;
+  background-color: var(--panel-bg);
+  border-left: 1px solid var(--panel-border);
+  box-shadow: -2px 0 10px rgba(0, 0, 0, 0.1);
+  transition: right 0.3s ease-in-out;
+  padding: 20px;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+}
+
+.settings-panel.open {
+  right: 0; /* Slide in */
+}
+
+.settings-panel h3 {
+  font-size: 1.3em;
+  color: var(--text-color);
+  margin-bottom: 10px;
+}
+
+.setting-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 0;
+  border-bottom: 1px dashed var(--border-color);
+}
+
+.setting-item:last-of-type {
+  border-bottom: none;
+}
+
+.setting-item label {
+  color: var(--text-color);
+  font-size: 0.95em;
+}
+
+.settings-panel input[type="checkbox"],
+.settings-panel select {
+  accent-color: var(--button-bg); /* Style checkbox/select */
+  background-color: var(--input-bg);
+  color: var(--text-color);
+  border: 1px solid var(--border-color);
+  border-radius: 3px;
+  padding: 3px;
+}
+
+.settings-panel button {
+  margin-top: 20px;
+  align-self: flex-end;
+}

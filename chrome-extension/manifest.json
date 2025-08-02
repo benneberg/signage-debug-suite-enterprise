@@ -1,0 +1,8 @@
+{
+  "manifest_version": 3,
+  "name": "Signage Debug",
+  "version": "1.0",
+  "description": "A custom DevTools panel for debugging digital signage web UIs.",
+  "devtools_page": "devtools.html",
+  "permissions": ["activeTab"]
+}

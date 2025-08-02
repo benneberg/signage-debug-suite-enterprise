@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Log Analyzer</title>
+    <style>
+        body { font-family: sans-serif; padding: 20px; background-color: var(--bg-color); color: var(--text-color); }
+        h2 { color: var(--text-color); margin-bottom: 15px; }
+        p { margin-bottom: 10px; }
+        .ai-disabled { background-color: rgba(255, 193, 7, 0.1); border: 1px solid #ffc107; border-radius: 5px; padding: 15px; margin-bottom: 20px; }
+        .privacy-warning { background-color: rgba(220, 53, 69, 0.1); border: 1px solid #dc3545; border-radius: 5px; padding: 15px; margin-bottom: 20px; }
+        textarea { width: 100%; height: 200px; padding: 10px; border: 1px solid var(--border-color); background-color: var(--input-bg); color: var(--text-color); border-radius: 5px; resize: vertical; font-family: monospace; }
+        button { background-color: var(--button-bg); color: var(--button-text); border: none; padding: 10px 15px; border-radius: 5px; cursor: pointer; margin-top: 10px; margin-right: 10px; }
+        button:disabled { opacity: 0.5; cursor: not-allowed; }
+        .analysis-output { margin-top: 20px; padding: 15px; border: 1px solid var(--border-color); background-color: var(--input-bg); border-radius: 5px; min-height: 150px; white-space: pre-wrap; }
+        .loading { opacity: 0.7; font-style: italic; }
+        .error { color: #e06c75; }
+        .success { color: #98c379; }
+        .api-key-input { width: 100%; padding: 8px; margin-bottom: 10px; border: 1px solid var(--border-color); background-color: var(--input-bg); color: var(--text-color); border-radius: 5px; }
+    </style>
+</head>
+<body>
+    <h2>AI Log Analyzer 🧠</h2>
+    <p>Use AI to analyze Android logcat output and get intelligent insights about errors, warnings, and potential issues.</p>
+
+    <div id="ai-disabled-warning" class="ai-disabled" style="display: none;">
+        <strong>⚠️ AI Assistant Disabled</strong><br>
+        The AI Assistant is currently disabled in settings. Enable it to use this tool.
+    </div>
+
+    <div id="privacy-warning" class="privacy-warning" style="display: none;">
+        <strong>🔒 Privacy Mode Active</strong><br>
+        Privacy mode is enabled, which blocks external API calls. This tool requires OpenAI API access to function.
+    </div>
+
+    <div id="api-key-section" style="display: none;">
+        <label for="api-key-input">OpenAI API Key (stored locally):</label>
+        <input type="password" id="api-key-input" class="api-key-input" placeholder="sk-...">
+        <small style="opacity: 0.7;">Your API key is stored locally and never sent to our servers.</small>
+    </div>
+
+    <div id="main-interface">
+        <textarea id="logcat-input" placeholder="Paste your Android logcat output here...
+
+Example:
+07-23 10:00:01.123  1234  5678 I App: Application started. Version 1.0.
+07-23 10:00:02.456  1234  5678 D Player: Initializing media player instance.
+07-23 10:00:05.222  1234  5678 E Player: Media playback error: Codec not supported.
+07-23 10:00:08.666  1234  5678 E System.err: java.lang.NullPointerException
+"></textarea>
+        <button id="analyze-btn">🔍 Analyze with AI</button>
+        <button id="clear-btn">🗑️ Clear</button>
+        <button id="export-btn" style="display: none;">📄 Export Report</button>
+    </div>
+
+    <div class="analysis-output" id="analysis-output">
+        AI analysis results will appear here. The AI will identify critical errors, suggest solutions, and provide insights about your signage player logs.
+    </div>
+
+    <script type="module">
+        // Check if we're in the parent window context or iframe
+        const isInIframe = window !== window.parent;
+        let parentPreferences = {};
+        let currentToolId = '';
+
+        const elements = {
+            aiDisabledWarning: document.getElementById('ai-disabled-warning'),
+            privacyWarning: document.getElementById('privacy-warning'),
+            apiKeySection: document.getElementById('api-key-section'),
+            apiKeyInput: document.getElementById('api-key-input'),
+            mainInterface: document.getElementById('main-interface'),
+            logcatInput: document.getElementById('logcat-input'),
+            analyzeBtn: document.getElementById('analyze-btn'),
+            clearBtn: document.getElementById('clear-btn'),
+            exportBtn: document.getElementById('export-btn'),
+            analysisOutput: document.getElementById('analysis-output')
+        };
+
+        let lastAnalysisResult = '';
+
+        function saveState() {
+            if (currentToolId) {
+                const state = {
+                    logInput: elements.logcatInput.value,
+                    analysisOutput: elements.analysisOutput.innerHTML,
+                    lastAnalysisResult: lastAnalysisResult,
+                    exportBtnDisplay: elements.exportBtn.style.display
+                };
+                localStorage.setItem(`tool-state-${currentToolId}`, JSON.stringify(state));
+            }
+        }
+
+        function loadState() {
+            if (currentToolId) {
+                const savedState = localStorage.getItem(`tool-state-${currentToolId}`);
+                if (savedState) {
+                    const state = JSON.parse(savedState);
+                    elements.logcatInput.value = state.logInput || '';
+                    elements.analysisOutput.innerHTML = state.analysisOutput || 'AI analysis results will appear here. The AI will identify critical errors, suggest solutions, and provide insights about your signage player logs.';
+                    lastAnalysisResult = state.lastAnalysisResult || '';
+                    elements.exportBtn.style.display = state.exportBtnDisplay || 'none';
+                }
+            }
+        }
+
+        function updateUIBasedOnPreferences() {
+            const aiEnabled = parentPreferences.aiAssistantEnabled;
+            const privacyMode = parentPreferences.privacyModeEnabled;
+
+            // Show/hide warnings based on preferences
+            elements.aiDisabledWarning.style.display = !aiEnabled ? 'block' : 'none';
+            elements.privacyWarning.style.display = privacyMode ? 'block' : 'none';
+            
+            // Show API key input if AI is enabled but privacy mode is off
+            elements.apiKeySection.style.display = (aiEnabled && !privacyMode) ? 'block' : 'none';
+            
+            // Disable main interface if AI is disabled or privacy mode is on
+            const shouldDisable = !aiEnabled || privacyMode;
+            elements.analyzeBtn.disabled = shouldDisable;
+            elements.logcatInput.disabled = shouldDisable;
+            
+            if (shouldDisable) {
+                elements.mainInterface.style.opacity = '0.5';
+            } else {
+                elements.mainInterface.style.opacity = '1';
+            }
+
+            // Load saved API key
+            if (aiEnabled && !privacyMode) {
+                const savedApiKey = localStorage.getItem('openai-api-key');
+                if (savedApiKey) {
+                    elements.apiKeyInput.value = savedApiKey;
+                }
+            }
+        }
+
+        // Save API key to localStorage
+        elements.apiKeyInput.addEventListener('change', () => {
+            localStorage.setItem('openai-api-key', elements.apiKeyInput.value);
+            saveState(); // Save state when API key changes
+        });
+
+        elements.analyzeBtn.addEventListener('click', async () => {
+            const logInput = elements.logcatInput.value.trim();
+            const apiKey = elements.apiKeyInput.value.trim();
+
+            if (!logInput) {
+                elements.analysisOutput.textContent = 'Please paste some logcat output to analyze.';
+                elements.analysisOutput.className = 'analysis-output error';
+                saveState();
+                return;
+            }
+
+            if (!apiKey) {
+                elements.analysisOutput.textContent = 'Please enter your OpenAI API key to use AI analysis.';
+                elements.analysisOutput.className = 'analysis-output error';
+                saveState();
+                return;
+            }
+
+            elements.analysisOutput.textContent = 'Analyzing logs with AI... This may take a few moments.';
+            elements.analysisOutput.className = 'analysis-output loading';
+            elements.analyzeBtn.disabled = true;
+
+            try {
+                // Import AI SDK dynamically to avoid loading if not needed
+                const { generateText } = await import('ai');
+                const { openai } = await import('@ai-sdk/openai');
+
+                const { text } = await generateText({
+                    model: openai('gpt-4o', { apiKey }),
+                    system: `You are an expert Android digital signage developer assistant. Analyze the provided logcat output.
+                             
+                             Your analysis should include:
+                             1. **Summary**: Brief overview of what's happening in the logs
+                             2. **Critical Issues**: Highlight errors, exceptions, and ANRs
+                             3. **Warnings**: Note important warnings that could lead to problems
+                             4. **Player Lifecycle**: Track signage player events (init, loadMedia, error, etc.)
+                             5. **Recommendations**: Suggest specific solutions or next steps
+                             6. **Timeline**: Group related events chronologically
+                             
+                             Focus on digital signage specific issues like:
+                             - Media playback problems (codec issues, network failures)
+                             - WebView crashes or JavaScript errors
+                             - Memory leaks or performance issues
+                             - Network connectivity problems
+                             - Display/resolution issues
+                             
+                             Format your response in clear sections with actionable insights.`,
+                    prompt: `Analyze the following Android logcat output from a digital signage player:\n\n${logInput}`,
+                });
+
+                lastAnalysisResult = text;
+                elements.analysisOutput.textContent = text;
+                elements.analysisOutput.className = 'analysis-output success';
+                elements.exportBtn.style.display = 'inline-block';
+
+            } catch (error) {
+                console.error('AI Analysis Error:', error);
+                let errorMessage = 'Failed to analyze logs with AI. ';
+                
+                if (error.message.includes('API key')) {
+                    errorMessage += 'Please check your OpenAI API key.';
+                } else if (error.message.includes('quota')) {
+                    errorMessage += 'API quota exceeded. Please check your OpenAI account.';
+                } else if (error.message.includes('network') || error.message.includes('fetch')) {
+                    errorMessage += 'Network error. Please check your internet connection.';
+                } else {
+                    errorMessage += `Error: ${error.message}`;
+                }
+
+                elements.analysisOutput.textContent = errorMessage;
+                elements.analysisOutput.className = 'analysis-output error';
+            } finally {
+                elements.analyzeBtn.disabled = false;
+                saveState(); // Save state after analysis attempt
+            }
+        });
+
+        elements.clearBtn.addEventListener('click', () => {
+            elements.logcatInput.value = '';
+            elements.analysisOutput.textContent = 'AI analysis results will appear here. The AI will identify critical errors, suggest solutions, and provide insights about your signage player logs.';
+            elements.analysisOutput.className = 'analysis-output';
+            elements.exportBtn.style.display = 'none';
+            lastAnalysisResult = '';
+            saveState(); // Save state after clearing
+        });
+
+        elements.exportBtn.addEventListener('click', () => {
+            if (!lastAnalysisResult) return;
+
+            const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+            const filename = `signage-log-analysis-${timestamp}.txt`;
+            
+            const content = `Signage DevHub - AI Log Analysis Report
+Generated: ${new Date().toLocaleString()}
+=================================================
+
+ORIGINAL LOGS:
+${elements.logcatInput.value}
+
+=================================================
+
+AI ANALYSIS:
+${lastAnalysisResult}
+
+=================================================
+Generated by Signage DevHub AI Log Analyzer
+`;
+
+            const blob = new Blob([content], { type: 'text/plain' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        });
+
+        elements.logcatInput.addEventListener('input', saveState); // Save state on input change
+
+        // Apply theme and receive preferences/toolId from parent
+        window.addEventListener('message', (event) => {
+            if (event.data.type === 'themeChange') {
+                document.documentElement.setAttribute('data-theme', event.data.theme);
+            } else if (event.data.type === 'preferencesUpdate') {
+                parentPreferences = event.data.preferences;
+                updateUIBasedOnPreferences();
+            } else if (event.data.type === 'toolId') {
+                currentToolId = event.data.toolId;
+                loadState(); // Load state once toolId is received
+            }
+        });
+        // Request initial preferences and toolId on load
+        window.parent.postMessage({ type: 'requestPreferences' }, '*');
+        window.parent.postMessage({ type: 'requestToolId' }, '*');
+    </script>
+</body>
+</html>

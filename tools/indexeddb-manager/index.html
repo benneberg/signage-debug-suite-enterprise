@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>IndexedDB Manager</title>
+    <style>
+        body { font-family: sans-serif; padding: 20px; background-color: var(--bg-color); color: var(--text-color); }
+        h2 { color: var(--text-color); margin-bottom: 15px; }
+        p { margin-bottom: 10px; }
+        .db-list, .object-store-list { margin-top: 15px; border: 1px solid var(--border-color); background-color: var(--input-bg); border-radius: 5px; padding: 10px; }
+        .db-item, .os-item { padding: 8px; border-bottom: 1px dashed var(--border-color); cursor: pointer; }
+        .db-item:last-child, .os-item:last-child { border-bottom: none; }
+        .db-item:hover, .os-item:hover { background-color: rgba(0, 123, 255, 0.1); }
+        .data-view { margin-top: 20px; padding: 15px; border: 1px solid var(--border-color); background-color: var(--input-bg); border-radius: 5px; min-height: 150px; white-space: pre-wrap; font-family: monospace; }
+    </style>
+</head>
+<body>
+    <h2>IndexedDB Manager</h2>
+    <p>Inspect and manage IndexedDB databases for the current origin.</p>
+
+    <h3>Databases:</h3>
+    <div id="db-list" class="db-list">Loading databases...</div>
+
+    <h3>Object Stores:</h3>
+    <div id="object-store-list" class="object-store-list">Select a database to view its object stores.</div>
+
+    <h3>Data View:</h3>
+    <div id="data-view" class="data-view">Select an object store to view its data.</div>
+
+    <script>
+        const dbListDiv = document.getElementById('db-list');
+        const objectStoreListDiv = document.getElementById('object-store-list');
+        const dataViewDiv = document.getElementById('data-view');
+        let currentToolId = '';
+        let currentDbName = '';
+        let currentStoreName = '';
+
+        function saveState() {
+            if (currentToolId) {
+                const state = {
+                    currentDbName: currentDbName,
+                    currentStoreName: currentStoreName,
+                    dataViewContent: dataViewDiv.innerHTML
+                };
+                localStorage.setItem(`tool-state-${currentToolId}`, JSON.stringify(state));
+            }
+        }
+
+        function loadState() {
+            if (currentToolId) {
+                const savedState = localStorage.getItem(`tool-state-${currentToolId}`);
+                if (savedState) {
+                    const state = JSON.parse(savedState);
+                    currentDbName = state.currentDbName || '';
+                    currentStoreName = state.currentStoreName || '';
+                    dataViewDiv.innerHTML = state.dataViewContent || 'Select an object store to view its data.';
+                    // Re-list databases and try to re-open the last selected DB/Store
+                    listDatabases().then(() => {
+                        if (currentDbName) {
+                            openDatabase(currentDbName).then(() => {
+                                if (currentStoreName) {
+                                    // This is tricky as db connection is closed.
+                                    // For simplicity, we'll just show the dataViewContent.
+                                    // A more robust solution would re-fetch the data.
+                                }
+                            });
+                        }
+                    });
+                }
+            }
+        }
+
+        async function listDatabases() {
+            dbListDiv.innerHTML = '';
+            if (!window.indexedDB) {
+                dbListDiv.textContent = 'IndexedDB not supported in this browser.';
+                return;
+            }
+            try {
+                const databases = await indexedDB.databases();
+                if (databases.length === 0) {
+                    dbListDiv.textContent = 'No IndexedDB databases found.';
+                    return;
+                }
+                databases.forEach(dbInfo => {
+                    const dbItem = document.createElement('div');
+                    dbItem.classList.add('db-item');
+                    dbItem.textContent = `${dbInfo.name} (v${dbInfo.version})`;
+                    dbItem.dataset.dbName = dbInfo.name;
+                    dbItem.addEventListener('click', () => {
+                        currentDbName = dbInfo.name;
+                        openDatabase(dbInfo.name);
+                        saveState();
+                    });
+                    dbListDiv.appendChild(dbItem);
+                });
+            } catch (error) {
+                dbListDiv.textContent = `Error listing databases: ${error.message}`;
+                console.error('Error listing IndexedDB databases:', error);
+            }
+        }
+
+        function openDatabase(dbName) {
+            return new Promise((resolve, reject) => {
+                objectStoreListDiv.innerHTML = 'Loading object stores...';
+                dataViewDiv.textContent = 'Select an object store to view its data.';
+
+                const request = indexedDB.open(dbName);
+
+                request.onerror = (event) => {
+                    objectStoreListDiv.textContent = `Error opening database ${dbName}: ${event.target.error}`;
+                    console.error(`Error opening database ${dbName}:`, event.target.error);
+                    reject(event.target.error);
+                };
+
+                request.onsuccess = (event) => {
+                    const db = event.target.result;
+                    objectStoreListDiv.innerHTML = '';
+                    if (db.objectStoreNames.length === 0) {
+                        objectStoreListDiv.textContent = 'No object stores found in this database.';
+                    } else {
+                        Array.from(db.objectStoreNames).forEach(storeName => {
+                            const osItem = document.createElement('div');
+                            osItem.classList.add('os-item');
+                            osItem.textContent = storeName;
+                            osItem.dataset.storeName = storeName;
+                            osItem.addEventListener('click', () => {
+                                currentStoreName = storeName;
+                                viewObjectStoreData(db, storeName);
+                                saveState();
+                            });
+                            objectStoreListDiv.appendChild(osItem);
+                        });
+                    }
+                    db.close();
+                    resolve();
+                };
+            });
+        }
+
+        function viewObjectStoreData(db, storeName) {
+            dataViewDiv.textContent = 'Loading data...';
+            const request = indexedDB.open(db.name);
+
+            request.onerror = (event) => {
+                dataViewDiv.textContent = `Error opening database to view data: ${event.target.error}`;
+                console.error(`Error opening database to view data:`, event.target.error);
+            };
+
+            request.onsuccess = (event) => {
+                const dbConnection = event.target.result;
+                const transaction = dbConnection.transaction([storeName], 'readonly');
+                const objectStore = transaction.objectStore(storeName);
+                const allData = [];
+
+                objectStore.openCursor().onsuccess = (event) => {
+                    const cursor = event.target.result;
+                    if (cursor) {
+                        allData.push({ key: cursor.key, value: cursor.value });
+                        cursor.continue();
+                    } else {
+                        dataViewDiv.textContent = JSON.stringify(allData, null, 2);
+                    }
+                };
+
+                transaction.oncomplete = () => dbConnection.close();
+                transaction.onerror = (event) => {
+                    dataViewDiv.textContent = `Error reading data from ${storeName}: ${event.target.error}`;
+                    console.error(`Error reading data from ${storeName}:`, event.target.error);
+                    dbConnection.close();
+                };
+            };
+        }
+
+        // Apply theme and receive toolId from parent
+        window.addEventListener('message', (event) => {
+            if (event.data.type === 'themeChange') {
+                document.documentElement.setAttribute('data-theme', event.data.theme);
+            } else if (event.data.type === 'toolId') {
+                currentToolId = event.data.toolId;
+                loadState(); // Load state once toolId is received
+            }
+        });
+        // Request initial theme and toolId on load
+        window.parent.postMessage({ type: 'requestTheme' }, '*');
+        window.parent.postMessage({ type: 'requestToolId' }, '*');
+    </script>
+</body>
+</html>

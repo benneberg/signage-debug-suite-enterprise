@@ -1,0 +1,827 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Performance Dashboard</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+    <style>
+        body { font-family: sans-serif; padding: 20px; background-color: var(--bg-color); color: var(--text-color); margin: 0; }
+        h2 { color: var(--text-color); margin-bottom: 15px; }
+        .dashboard-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; padding: 16px; background-color: var(--input-bg); border: 1px solid var(--border-color); border-radius: 8px; }
+        .dashboard-controls { display: flex; gap: 10px; align-items: center; }
+        .dashboard-controls button, .dashboard-controls select { padding: 8px 12px; border: 1px solid var(--border-color); background-color: var(--bg-color); color: var(--text-color); border-radius: 5px; cursor: pointer; }
+        .dashboard-controls button:hover { background-color: var(--button-bg); color: var(--button-text); }
+        .metrics-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 20px; }
+        .metric-card { background-color: var(--input-bg); border: 1px solid var(--border-color); border-radius: 8px; padding: 16px; text-align: center; }
+        .metric-value { font-size: 2em; font-weight: bold; margin-bottom: 8px; }
+        .metric-label { font-size: 0.9em; opacity: 0.8; }
+        .metric-trend { font-size: 0.8em; margin-top: 4px; }
+        .trend-up { color: #e06c75; }
+        .trend-down { color: #98c379; }
+        .trend-stable { color:
+        .trend-up { color: #e06c75; }
+        .trend-down { color: #98c379; }
+        .trend-stable { color: #56b6c2; }
+        .charts-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px; }
+        .chart-container { background-color: var(--input-bg); border: 1px solid var(--border-color); border-radius: 8px; padding: 16px; }
+        .chart-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+        .chart-title { font-weight: bold; font-size: 1.1em; }
+        .chart-controls { display: flex; gap: 8px; }
+        .chart-controls button { padding: 4px 8px; font-size: 0.8em; border: 1px solid var(--border-color); background-color: var(--bg-color); color: var(--text-color); border-radius: 3px; cursor: pointer; }
+        .chart-canvas { width: 100% !important; height: 300px !important; }
+        .full-width { grid-column: 1 / -1; }
+        .alerts-panel { background-color: var(--input-bg); border: 1px solid var(--border-color); border-radius: 8px; padding: 16px; margin-bottom: 20px; }
+        .alert-item { padding: 12px; margin-bottom: 8px; border-left: 4px solid; border-radius: 4px; }
+        .alert-critical { border-left-color: #e06c75; background-color: rgba(224, 108, 117, 0.1); }
+        .alert-warning { border-left-color: #e5c07b; background-color: rgba(229, 192, 123, 0.1); }
+        .alert-info { border-left-color: #56b6c2; background-color: rgba(86, 182, 194, 0.1); }
+        .loading { text-align: center; padding: 40px; opacity: 0.7; }
+        @media (max-width: 1200px) {
+            .charts-grid { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+    <h2>Performance Dashboard 📊</h2>
+    
+    <div class="dashboard-header">
+        <div class="dashboard-info">
+            <h3>Real-time Performance Monitoring</h3>
+            <p>Monitor system performance, resource usage, and application health</p>
+        </div>
+        <div class="dashboard-controls">
+            <select id="time-range">
+                <option value="1h">Last Hour</option>
+                <option value="6h">Last 6 Hours</option>
+                <option value="24h">Last 24 Hours</option>
+                <option value="7d">Last 7 Days</option>
+            </select>
+            <select id="refresh-interval">
+                <option value="5">5 seconds</option>
+                <option value="10">10 seconds</option>
+                <option value="30">30 seconds</option>
+                <option value="60">1 minute</option>
+            </select>
+            <button id="start-monitoring">▶️ Start</button>
+            <button id="export-dashboard">💾 Export</button>
+        </div>
+    </div>
+
+    <div class="metrics-grid">
+        <div class="metric-card">
+            <div class="metric-value" id="cpu-metric">--</div>
+            <div class="metric-label">CPU Usage (%)</div>
+            <div class="metric-trend" id="cpu-trend">--</div>
+        </div>
+        <div class="metric-card">
+            <div class="metric-value" id="memory-metric">--</div>
+            <div class="metric-label">Memory Usage (MB)</div>
+            <div class="metric-trend" id="memory-trend">--</div>
+        </div>
+        <div class="metric-card">
+            <div class="metric-value" id="network-metric">--</div>
+            <div class="metric-label">Network (KB/s)</div>
+            <div class="metric-trend" id="network-trend">--</div>
+        </div>
+        <div class="metric-card">
+            <div class="metric-value" id="battery-metric">--</div>
+            <div class="metric-label">Battery (%)</div>
+            <div class="metric-trend" id="battery-trend">--</div>
+        </div>
+        <div class="metric-card">
+            <div class="metric-value" id="temperature-metric">--</div>
+            <div class="metric-label">Temperature (°C)</div>
+            <div class="metric-trend" id="temperature-trend">--</div>
+        </div>
+        <div class="metric-card">
+            <div class="metric-value" id="fps-metric">--</div>
+            <div class="metric-label">FPS</div>
+            <div class="metric-trend" id="fps-trend">--</div>
+        </div>
+    </div>
+
+    <div class="alerts-panel">
+        <h3>Performance Alerts</h3>
+        <div id="alerts-container">
+            <div class="loading">No alerts at this time</div>
+        </div>
+    </div>
+
+    <div class="charts-grid">
+        <div class="chart-container">
+            <div class="chart-header">
+                <div class="chart-title">CPU & Memory Usage</div>
+                <div class="chart-controls">
+                    <button onclick="toggleChartType('cpu-memory-chart')">📊</button>
+                    <button onclick="exportChart('cpu-memory-chart')">💾</button>
+                </div>
+            </div>
+            <canvas id="cpu-memory-chart" class="chart-canvas"></canvas>
+        </div>
+
+        <div class="chart-container">
+            <div class="chart-header">
+                <div class="chart-title">Network Activity</div>
+                <div class="chart-controls">
+                    <button onclick="toggleChartType('network-chart')">📊</button>
+                    <button onclick="exportChart('network-chart')">💾</button>
+                </div>
+            </div>
+            <canvas id="network-chart" class="chart-canvas"></canvas>
+        </div>
+
+        <div class="chart-container">
+            <div class="chart-header">
+                <div class="chart-title">System Health</div>
+                <div class="chart-controls">
+                    <button onclick="toggleChartType('health-chart')">📊</button>
+                    <button onclick="exportChart('health-chart')">💾</button>
+                </div>
+            </div>
+            <canvas id="health-chart" class="chart-canvas"></canvas>
+        </div>
+
+        <div class="chart-container">
+            <div class="chart-header">
+                <div class="chart-title">Performance Trends</div>
+                <div class="chart-controls">
+                    <button onclick="toggleChartType('trends-chart')">📊</button>
+                    <button onclick="exportChart('trends-chart')">💾</button>
+                </div>
+            </div>
+            <canvas id="trends-chart" class="chart-canvas"></canvas>
+        </div>
+
+        <div class="chart-container full-width">
+            <div class="chart-header">
+                <div class="chart-title">Comprehensive Performance Timeline</div>
+                <div class="chart-controls">
+                    <button onclick="toggleChartType('timeline-chart')">📊</button>
+                    <button onclick="exportChart('timeline-chart')">💾</button>
+                    <button onclick="zoomChart('timeline-chart')">🔍</button>
+                </div>
+            </div>
+            <canvas id="timeline-chart" class="chart-canvas" style="height: 400px !important;"></canvas>
+        </div>
+    </div>
+
+    <script type="module">
+        class PerformanceDashboard {
+            constructor() {
+                this.charts = new Map();
+                this.performanceData = [];
+                this.isMonitoring = false;
+                this.refreshInterval = null;
+                this.alertThresholds = {
+                    cpu: 80,
+                    memory: 85,
+                    temperature: 70,
+                    battery: 20
+                };
+                this.currentToolId = '';
+                this.initializeElements();
+                this.setupEventListeners();
+            }
+
+            initializeElements() {
+                this.elements = {
+                    startBtn: document.getElementById('start-monitoring'),
+                    exportBtn: document.getElementById('export-dashboard'),
+                    timeRange: document.getElementById('time-range'),
+                    refreshInterval: document.getElementById('refresh-interval'),
+                    alertsContainer: document.getElementById('alerts-container'),
+                    metrics: {
+                        cpu: document.getElementById('cpu-metric'),
+                        memory: document.getElementById('memory-metric'),
+                        network: document.getElementById('network-metric'),
+                        battery: document.getElementById('battery-metric'),
+                        temperature: document.getElementById('temperature-metric'),
+                        fps: document.getElementById('fps-metric')
+                    },
+                    trends: {
+                        cpu: document.getElementById('cpu-trend'),
+                        memory: document.getElementById('memory-trend'),
+                        network: document.getElementById('network-trend'),
+                        battery: document.getElementById('battery-trend'),
+                        temperature: document.getElementById('temperature-trend'),
+                        fps: document.getElementById('fps-trend')
+                    }
+                };
+            }
+
+            setupEventListeners() {
+                this.elements.startBtn.addEventListener('click', () => {
+                    if (this.isMonitoring) {
+                        this.stopMonitoring();
+                    } else {
+                        this.startMonitoring();
+                    }
+                });
+
+                this.elements.exportBtn.addEventListener('click', () => {
+                    this.exportDashboard();
+                });
+
+                this.elements.timeRange.addEventListener('change', () => {
+                    this.updateTimeRange();
+                });
+
+                this.elements.refreshInterval.addEventListener('change', () => {
+                    if (this.isMonitoring) {
+                        this.stopMonitoring();
+                        this.startMonitoring();
+                    }
+                });
+            }
+
+            startMonitoring() {
+                this.isMonitoring = true;
+                this.elements.startBtn.textContent = '⏹️ Stop';
+                this.elements.startBtn.style.backgroundColor = '#e06c75';
+                
+                this.initializeCharts();
+                this.generateInitialData();
+                
+                const interval = parseInt(this.elements.refreshInterval.value) * 1000;
+                this.refreshInterval = setInterval(() => {
+                    this.updateData();
+                }, interval);
+
+                this.saveState();
+            }
+
+            stopMonitoring() {
+                this.isMonitoring = false;
+                this.elements.startBtn.textContent = '▶️ Start';
+                this.elements.startBtn.style.backgroundColor = '';
+                
+                if (this.refreshInterval) {
+                    clearInterval(this.refreshInterval);
+                    this.refreshInterval = null;
+                }
+
+                this.saveState();
+            }
+
+            generateInitialData() {
+                const now = Date.now();
+                this.performanceData = [];
+                
+                for (let i = 0; i < 50; i++) {
+                    const timestamp = now - (50 - i) * 30000; // 30 second intervals
+                    this.performanceData.push(this.generateDataPoint(timestamp));
+                }
+                
+                this.updateAllCharts();
+                this.updateMetrics();
+                this.checkAlerts();
+            }
+
+            generateDataPoint(timestamp) {
+                const baseTime = timestamp / 1000000; // Scale for variation
+                return {
+                    timestamp: new Date(timestamp).toISOString(),
+                    cpu: Math.max(0, Math.min(100, 30 + Math.random() * 40 + Math.sin(baseTime * 0.001) * 20)),
+                    memory: Math.max(0, 200 + Math.random() * 300 + Math.sin(baseTime * 0.0008) * 100),
+                    network: Math.max(0, Math.random() * 1000 + Math.sin(baseTime * 0.0012) * 200),
+                    battery: Math.max(0, Math.min(100, 85 - (timestamp - Date.now() + 50 * 30000) / 3600000 + Math.random() * 5)),
+                    temperature: Math.max(20, Math.min(80, 45 + Math.random() * 15 + Math.sin(baseTime * 0.0005) * 8)),
+                    fps: Math.max(0, Math.min(60, 55 + Math.random() * 10 + Math.sin(baseTime * 0.002) * 5))
+                };
+            }
+
+            updateData() {
+                const newDataPoint = this.generateDataPoint(Date.now());
+                this.performanceData.push(newDataPoint);
+                
+                // Keep only last 200 data points
+                if (this.performanceData.length > 200) {
+                    this.performanceData.shift();
+                }
+                
+                this.updateAllCharts();
+                this.updateMetrics();
+                this.checkAlerts();
+            }
+
+            initializeCharts() {
+                this.createCpuMemoryChart();
+                this.createNetworkChart();
+                this.createHealthChart();
+                this.createTrendsChart();
+                this.createTimelineChart();
+            }
+
+            createCpuMemoryChart() {
+                const ctx = document.getElementById('cpu-memory-chart').getContext('2d');
+                const chart = new Chart(ctx, {
+                    type: 'line',
+                    data: {
+                        labels: [],
+                        datasets: [
+                            {
+                                label: 'CPU Usage (%)',
+                                data: [],
+                                borderColor: '#e06c75',
+                                backgroundColor: 'rgba(224, 108, 117, 0.1)',
+                                yAxisID: 'y'
+                            },
+                            {
+                                label: 'Memory Usage (MB)',
+                                data: [],
+                                borderColor: '#61afef',
+                                backgroundColor: 'rgba(97, 175, 239, 0.1)',
+                                yAxisID: 'y1'
+                            }
+                        ]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        scales: {
+                            x: {
+                                type: 'time',
+                                time: { unit: 'minute' }
+                            },
+                            y: {
+                                type: 'linear',
+                                display: true,
+                                position: 'left',
+                                max: 100,
+                                title: { display: true, text: 'CPU (%)' }
+                            },
+                            y1: {
+                                type: 'linear',
+                                display: true,
+                                position: 'right',
+                                title: { display: true, text: 'Memory (MB)' },
+                                grid: { drawOnChartArea: false }
+                            }
+                        },
+                        plugins: {
+                            legend: { display: true, position: 'top' }
+                        },
+                        animation: { duration: 0 }
+                    }
+                });
+                this.charts.set('cpu-memory-chart', chart);
+            }
+
+            createNetworkChart() {
+                const ctx = document.getElementById('network-chart').getContext('2d');
+                const chart = new Chart(ctx, {
+                    type: 'line',
+                    data: {
+                        labels: [],
+                        datasets: [{
+                            label: 'Network Activity (KB/s)',
+                            data: [],
+                            borderColor: '#98c379',
+                            backgroundColor: 'rgba(152, 195, 121, 0.1)',
+                            fill: true,
+                            tension: 0.4
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        scales: {
+                            x: {
+                                type: 'time',
+                                time: { unit: 'minute' }
+                            },
+                            y: {
+                                beginAtZero: true,
+                                title: { display: true, text: 'KB/s' }
+                            }
+                        },
+                        plugins: {
+                            legend: { display: true, position: 'top' }
+                        },
+                        animation: { duration: 0 }
+                    }
+                });
+                this.charts.set('network-chart', chart);
+            }
+
+            createHealthChart() {
+                const ctx = document.getElementById('health-chart').getContext('2d');
+                const chart = new Chart(ctx, {
+                    type: 'line',
+                    data: {
+                        labels: [],
+                        datasets: [
+                            {
+                                label: 'Battery (%)',
+                                data: [],
+                                borderColor: '#e5c07b',
+                                backgroundColor: 'rgba(229, 192, 123, 0.1)'
+                            },
+                            {
+                                label: 'Temperature (°C)',
+                                data: [],
+                                borderColor: '#c678dd',
+                                backgroundColor: 'rgba(198, 120, 221, 0.1)'
+                            }
+                        ]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        scales: {
+                            x: {
+                                type: 'time',
+                                time: { unit: 'minute' }
+                            },
+                            y: {
+                                beginAtZero: true,
+                                max: 100,
+                                title: { display: true, text: 'Value' }
+                            }
+                        },
+                        plugins: {
+                            legend: { display: true, position: 'top' }
+                        },
+                        animation: { duration: 0 }
+                    }
+                });
+                this.charts.set('health-chart', chart);
+            }
+
+            createTrendsChart() {
+                const ctx = document.getElementById('trends-chart').getContext('2d');
+                const chart = new Chart(ctx, {
+                    type: 'line',
+                    data: {
+                        labels: [],
+                        datasets: [{
+                            label: 'FPS',
+                            data: [],
+                            borderColor: '#56b6c2',
+                            backgroundColor: 'rgba(86, 182, 194, 0.1)',
+                            fill: true
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        scales: {
+                            x: {
+                                type: 'time',
+                                time: { unit: 'minute' }
+                            },
+                            y: {
+                                beginAtZero: true,
+                                max: 60,
+                                title: { display: true, text: 'FPS' }
+                            }
+                        },
+                        plugins: {
+                            legend: { display: true, position: 'top' }
+                        },
+                        animation: { duration: 0 }
+                    }
+                });
+                this.charts.set('trends-chart', chart);
+            }
+
+            createTimelineChart() {
+                const ctx = document.getElementById('timeline-chart').getContext('2d');
+                const chart = new Chart(ctx, {
+                    type: 'line',
+                    data: {
+                        labels: [],
+                        datasets: [
+                            {
+                                label: 'CPU (%)',
+                                data: [],
+                                borderColor: '#e06c75',
+                                backgroundColor: 'rgba(224, 108, 117, 0.05)',
+                                tension: 0.4
+                            },
+                            {
+                                label: 'Memory (MB)',
+                                data: [],
+                                borderColor: '#61afef',
+                                backgroundColor: 'rgba(97, 175, 239, 0.05)',
+                                tension: 0.4,
+                                yAxisID: 'y1'
+                            },
+                            {
+                                label: 'Network (KB/s)',
+                                data: [],
+                                borderColor: '#98c379',
+                                backgroundColor: 'rgba(152, 195, 121, 0.05)',
+                                tension: 0.4,
+                                yAxisID: 'y2'
+                            }
+                        ]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        scales: {
+                            x: {
+                                type: 'time',
+                                time: { unit: 'minute' }
+                            },
+                            y: {
+                                type: 'linear',
+                                display: true,
+                                position: 'left',
+                                max: 100,
+                                title: { display: true, text: 'CPU (%)' }
+                            },
+                            y1: {
+                                type: 'linear',
+                                display: false,
+                                position: 'right'
+                            },
+                            y2: {
+                                type: 'linear',
+                                display: false,
+                                position: 'right'
+                            }
+                        },
+                        plugins: {
+                            legend: { display: true, position: 'top' }
+                        },
+                        animation: { duration: 0 }
+                    }
+                });
+                this.charts.set('timeline-chart', chart);
+            }
+
+            updateAllCharts() {
+                const labels = this.performanceData.map(d => new Date(d.timestamp));
+                
+                // Update CPU & Memory Chart
+                const cpuMemoryChart = this.charts.get('cpu-memory-chart');
+                if (cpuMemoryChart) {
+                    cpuMemoryChart.data.labels = labels;
+                    cpuMemoryChart.data.datasets[0].data = this.performanceData.map(d => d.cpu);
+                    cpuMemoryChart.data.datasets[1].data = this.performanceData.map(d => d.memory);
+                    cpuMemoryChart.update('none');
+                }
+
+                // Update Network Chart
+                const networkChart = this.charts.get('network-chart');
+                if (networkChart) {
+                    networkChart.data.labels = labels;
+                    networkChart.data.datasets[0].data = this.performanceData.map(d => d.network);
+                    networkChart.update('none');
+                }
+
+                // Update Health Chart
+                const healthChart = this.charts.get('health-chart');
+                if (healthChart) {
+                    healthChart.data.labels = labels;
+                    healthChart.data.datasets[0].data = this.performanceData.map(d => d.battery);
+                    healthChart.data.datasets[1].data = this.performanceData.map(d => d.temperature);
+                    healthChart.update('none');
+                }
+
+                // Update Trends Chart
+                const trendsChart = this.charts.get('trends-chart');
+                if (trendsChart) {
+                    trendsChart.data.labels = labels;
+                    trendsChart.data.datasets[0].data = this.performanceData.map(d => d.fps);
+                    trendsChart.update('none');
+                }
+
+                // Update Timeline Chart
+                const timelineChart = this.charts.get('timeline-chart');
+                if (timelineChart) {
+                    timelineChart.data.labels = labels;
+                    timelineChart.data.datasets[0].data = this.performanceData.map(d => d.cpu);
+                    timelineChart.data.datasets[1].data = this.performanceData.map(d => d.memory);
+                    timelineChart.data.datasets[2].data = this.performanceData.map(d => d.network);
+                    timelineChart.update('none');
+                }
+            }
+
+            updateMetrics() {
+                if (this.performanceData.length === 0) return;
+
+                const latest = this.performanceData[this.performanceData.length - 1];
+                const previous = this.performanceData.length > 1 ? this.performanceData[this.performanceData.length - 2] : latest;
+
+                // Update metric values
+                this.elements.metrics.cpu.textContent = Math.round(latest.cpu);
+                this.elements.metrics.memory.textContent = Math.round(latest.memory);
+                this.elements.metrics.network.textContent = Math.round(latest.network);
+                this.elements.metrics.battery.textContent = Math.round(latest.battery);
+                this.elements.metrics.temperature.textContent = Math.round(latest.temperature);
+                this.elements.metrics.fps.textContent = Math.round(latest.fps);
+
+                // Update trends
+                this.updateTrend('cpu', latest.cpu, previous.cpu);
+                this.updateTrend('memory', latest.memory, previous.memory);
+                this.updateTrend('network', latest.network, previous.network);
+                this.updateTrend('battery', latest.battery, previous.battery);
+                this.updateTrend('temperature', latest.temperature, previous.temperature);
+                this.updateTrend('fps', latest.fps, previous.fps);
+            }
+
+            updateTrend(metric, current, previous) {
+                const diff = current - previous;
+                const element = this.elements.trends[metric];
+                
+                if (Math.abs(diff) < 1) {
+                    element.textContent = 'Stable';
+                    element.className = 'metric-trend trend-stable';
+                } else if (diff > 0) {
+                    element.textContent = `+${diff.toFixed(1)}`;
+                    element.className = metric === 'battery' ? 'metric-trend trend-down' : 'metric-trend trend-up';
+                } else {
+                    element.textContent = diff.toFixed(1);
+                    element.className = metric === 'battery' ? 'metric-trend trend-up' : 'metric-trend trend-down';
+                }
+            }
+
+            checkAlerts() {
+                if (this.performanceData.length === 0) return;
+
+                const latest = this.performanceData[this.performanceData.length - 1];
+                const alerts = [];
+
+                if (latest.cpu > this.alertThresholds.cpu) {
+                    alerts.push({
+                        type: 'critical',
+                        title: 'High CPU Usage',
+                        message: `CPU usage is at ${Math.round(latest.cpu)}%, exceeding threshold of ${this.alertThresholds.cpu}%`
+                    });
+                }
+
+                if (latest.memory > this.alertThresholds.memory) {
+                    alerts.push({
+                        type: 'warning',
+                        title: 'High Memory Usage',
+                        message: `Memory usage is at ${Math.round(latest.memory)}MB, exceeding threshold`
+                    });
+                }
+
+                if (latest.temperature > this.alertThresholds.temperature) {
+                    alerts.push({
+                        type: 'warning',
+                        title: 'High Temperature',
+                        message: `Device temperature is at ${Math.round(latest.temperature)}°C`
+                    });
+                }
+
+                if (latest.battery < this.alertThresholds.battery) {
+                    alerts.push({
+                        type: 'info',
+                        title: 'Low Battery',
+                        message: `Battery level is at ${Math.round(latest.battery)}%`
+                    });
+                }
+
+                this.updateAlerts(alerts);
+            }
+
+            updateAlerts(alerts) {
+                const container = this.elements.alertsContainer;
+                
+                if (alerts.length === 0) {
+                    container.innerHTML = '<div class="loading">No alerts at this time</div>';
+                    return;
+                }
+
+                container.innerHTML = alerts.map(alert => `
+                    <div class="alert-item alert-${alert.type}">
+                        <strong>${alert.title}</strong><br>
+                        ${alert.message}
+                        <div style="font-size: 0.8em; opacity: 0.8; margin-top: 4px;">
+                            ${new Date().toLocaleTimeString()}
+                        </div>
+                    </div>
+                `).join('');
+            }
+
+            exportDashboard() {
+                const data = {
+                    timestamp: new Date().toISOString(),
+                    performanceData: this.performanceData,
+                    settings: {
+                        timeRange: this.elements.timeRange.value,
+                        refreshInterval: this.elements.refreshInterval.value
+                    },
+                    summary: this.generateSummary()
+                };
+
+                const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `performance-dashboard-${new Date().toISOString().slice(0, 10)}.json`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+            }
+
+            generateSummary() {
+                if (this.performanceData.length === 0) return {};
+
+                const latest = this.performanceData[this.performanceData.length - 1];
+                const averages = {
+                    cpu: this.performanceData.reduce((sum, d) => sum + d.cpu, 0) / this.performanceData.length,
+                    memory: this.performanceData.reduce((sum, d) => sum + d.memory, 0) / this.performanceData.length,
+                    network: this.performanceData.reduce((sum, d) => sum + d.network, 0) / this.performanceData.length,
+                    temperature: this.performanceData.reduce((sum, d) => sum + d.temperature, 0) / this.performanceData.length
+                };
+
+                return {
+                    current: latest,
+                    averages: averages,
+                    dataPoints: this.performanceData.length,
+                    timespan: {
+                        start: this.performanceData[0]?.timestamp,
+                        end: latest.timestamp
+                    }
+                };
+            }
+
+            saveState() {
+                if (this.currentToolId) {
+                    const state = {
+                        isMonitoring: this.isMonitoring,
+                        timeRange: this.elements.timeRange.value,
+                        refreshInterval: this.elements.refreshInterval.value,
+                        performanceDataLength: this.performanceData.length
+                    };
+                    localStorage.setItem(`tool-state-${this.currentToolId}`, JSON.stringify(state));
+                }
+            }
+
+            loadState() {
+                if (this.currentToolId) {
+                    const savedState = localStorage.getItem(`tool-state-${this.currentToolId}`);
+                    if (savedState) {
+                        const state = JSON.parse(savedState);
+                        this.elements.timeRange.value = state.timeRange || '1h';
+                        this.elements.refreshInterval.value = state.refreshInterval || '10';
+                        if (state.isMonitoring) {
+                            this.startMonitoring();
+                        }
+                    }
+                }
+            }
+
+            setToolId(toolId) {
+                this.currentToolId = toolId;
+                this.loadState();
+            }
+        }
+
+        // Global functions for chart controls
+        window.toggleChartType = (chartId) => {
+            const chart = dashboard.charts.get(chartId);
+            if (chart) {
+                chart.config.type = chart.config.type === 'line' ? 'bar' : 'line';
+                chart.update();
+            }
+        };
+
+        window.exportChart = (chartId) => {
+            const canvas = document.getElementById(chartId);
+            const dataUrl = canvas.toDataURL('image/png');
+            const a = document.createElement('a');
+            a.href = dataUrl;
+            a.download = `${chartId}-${new Date().toISOString().slice(0, 10)}.png`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+        };
+
+        window.zoomChart = (chartId) => {
+            const chart = dashboard.charts.get(chartId);
+            if (chart) {
+                // Toggle between different time ranges
+                const currentUnit = chart.options.scales.x.time.unit;
+                const newUnit = currentUnit === 'minute' ? 'second' : 'minute';
+                chart.options.scales.x.time.unit = newUnit;
+                chart.update();
+            }
+        };
+
+        // Initialize dashboard
+        const dashboard = new PerformanceDashboard();
+
+        // Apply theme and receive toolId from parent
+        window.addEventListener('message', (event) => {
+            if (event.data.type === 'themeChange') {
+                document.documentElement.setAttribute('data-theme', event.data.theme);
+            } else if (event.data.type === 'toolId') {
+                dashboard.setToolId(event.data.toolId);
+            }
+        });
+
+        window.parent.postMessage({ type: 'requestTheme' }, '*');
+        window.parent.postMessage({ type: 'requestToolId' }, '*');
+    </script>
+</body>
+</html>

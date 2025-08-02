@@ -1,0 +1,565 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Advanced Logcat Analyzer</title>
+    <style>
+        body { font-family: sans-serif; padding: 20px; background-color: var(--bg-color); color: var(--text-color); }
+        h2 { color: var(--text-color); margin-bottom: 15px; }
+        .toolbar { display: flex; gap: 10px; margin-bottom: 20px; flex-wrap: wrap; align-items: center; }
+        .toolbar button, .toolbar select, .toolbar input { padding: 8px 12px; border: 1px solid var(--border-color); background-color: var(--input-bg); color: var(--text-color); border-radius: 5px; cursor: pointer; }
+        .toolbar button:hover { background-color: var(--button-bg); color: var(--button-text); }
+        .input-section { margin-bottom: 20px; }
+        textarea { width: 100%; height: 200px; padding: 10px; border: 1px solid var(--border-color); background-color: var(--input-bg); color: var(--text-color); border-radius: 5px; resize: vertical; font-family: monospace; font-size: 12px; }
+        .analysis-results { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-top: 20px; }
+        .result-panel { border: 1px solid var(--border-color); border-radius: 8px; background-color: var(--input-bg); }
+        .panel-header { background-color: var(--header-bg); padding: 12px 16px; border-bottom: 1px solid var(--border-color); font-weight: bold; display: flex; justify-content: space-between; align-items: center; }
+        .panel-content { padding: 16px; max-height: 400px; overflow-y: auto; }
+        .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; margin-bottom: 20px; }
+        .summary-item { text-align: center; padding: 12px; border: 1px solid var(--border-color); border-radius: 6px; background-color: var(--bg-color); }
+        .summary-value { font-size: 1.5em; font-weight: bold; color: var(--button-bg); }
+        .summary-label { font-size: 0.9em; opacity: 0.8; }
+        .crash-item, .pattern-item, .metric-item { margin-bottom: 12px; padding: 12px; border-left: 4px solid; border-radius: 4px; }
+        .crash-critical { border-left-color: #e06c75; background-color: rgba(224, 108, 117, 0.1); }
+        .crash-high { border-left-color: #e5c07b; background-color: rgba(229, 192, 123, 0.1); }
+        .crash-medium { border-left-color: #61afef; background-color: rgba(97, 175, 239, 0.1); }
+        .crash-low { border-left-color: #98c379; background-color: rgba(152, 195, 121, 0.1); }
+        .pattern-error { border-left-color: #e06c75; background-color: rgba(224, 108, 117, 0.1); }
+        .pattern-warning { border-left-color: #e5c07b; background-color: rgba(229, 192, 123, 0.1); }
+        .pattern-info { border-left-color: #56b6c2; background-color: rgba(86, 182, 194, 0.1); }
+        .metric-critical { border-left-color: #e06c75; background-color: rgba(224, 108, 117, 0.1); }
+        .metric-warning { border-left-color: #e5c07b; background-color: rgba(229, 192, 123, 0.1); }
+        .metric-normal { border-left-color: #98c379; background-color: rgba(152, 195, 121, 0.1); }
+        .stack-trace { font-family: monospace; font-size: 11px; background-color: var(--bg-color); padding: 8px; border-radius: 4px; margin-top: 8px; max-height: 150px; overflow-y: auto; }
+        .recommendations { background-color: rgba(97, 175, 239, 0.1); border: 1px solid #61afef; border-radius: 6px; padding: 16px; margin-top: 20px; }
+        .recommendations h3 { color: #61afef; margin-bottom: 12px; }
+        .recommendations ul { margin-left: 20px; }
+        .recommendations li { margin-bottom: 8px; }
+        .badge { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 0.8em; font-weight: bold; margin-left: 8px; }
+        .badge-critical { background-color: #e06c75; color: white; }
+        .badge-high { background-color: #e5c07b; color: black; }
+        .badge-medium { background-color: #61afef; color: white; }
+        .badge-low { background-color: #98c379; color: white; }
+        .loading { text-align: center; padding: 40px; opacity: 0.7; }
+        @media (max-width: 768px) {
+            .analysis-results { grid-template-columns: 1fr; }
+            .toolbar { flex-direction: column; align-items: stretch; }
+        }
+    </style>
+</head>
+<body>
+    <h2>Advanced Logcat Analyzer 🔍</h2>
+    <p>Professional-grade logcat analysis with crash detection, performance monitoring, and intelligent insights.</p>
+
+    <div class="toolbar">
+        <button id="analyze-btn">🔍 Analyze Logs</button>
+        <button id="clear-btn">🗑️ Clear</button>
+        <button id="export-btn" style="display: none;">📊 Export Report</button>
+        <select id="filter-level">
+            <option value="">All Levels</option>
+            <option value="E">Errors Only</option>
+            <option value="W">Warnings & Errors</option>
+            <option value="I">Info & Above</option>
+        </select>
+        <input type="text" id="filter-tag" placeholder="Filter by tag...">
+        <input type="file" id="file-input" accept=".txt,.log" style="display: none;">
+        <button id="load-file-btn">📁 Load File</button>
+    </div>
+
+    <div class="input-section">
+        <textarea id="logcat-input" placeholder="Paste your Android logcat output here...
+
+Example:
+07-23 10:00:01.123  1234  5678 I App: Application started. Version 1.0.
+07-23 10:00:02.456  1234  5678 D Player: Initializing media player instance.
+07-23 10:00:05.222  1234  5678 E Player: Media playback error: Codec not supported.
+07-23 10:00:08.666  1234  5678 E AndroidRuntime: FATAL EXCEPTION: main
+07-23 10:00:08.667  1234  5678 E AndroidRuntime: java.lang.NullPointerException
+07-23 10:00:08.668  1234  5678 E AndroidRuntime:     at com.example.SignagePlayer.playMedia(SignagePlayer.java:123)"></textarea>
+    </div>
+
+    <div id="analysis-results" class="analysis-results" style="display: none;">
+        <div class="result-panel">
+            <div class="panel-header">
+                📊 Analysis Summary
+                <span id="analysis-time"></span>
+            </div>
+            <div class="panel-content">
+                <div id="summary-content" class="summary-grid">
+                    <!-- Summary items will be populated here -->
+                </div>
+            </div>
+        </div>
+
+        <div class="result-panel">
+            <div class="panel-header">
+                🚨 Crashes & Exceptions
+                <span id="crash-count" class="badge badge-critical">0</span>
+            </div>
+            <div class="panel-content" id="crashes-content">
+                <!-- Crash reports will be populated here -->
+            </div>
+        </div>
+
+        <div class="result-panel">
+            <div class="panel-header">
+                📈 Performance Metrics
+                <span id="metric-count" class="badge badge-medium">0</span>
+            </div>
+            <div class="panel-content" id="performance-content">
+                <!-- Performance metrics will be populated here -->
+            </div>
+        </div>
+
+        <div class="result-panel">
+            <div class="panel-header">
+                🔍 Pattern Analysis
+                <span id="pattern-count" class="badge badge-medium">0</span>
+            </div>
+            <div class="panel-content" id="patterns-content">
+                <!-- Pattern matches will be populated here -->
+            </div>
+        </div>
+    </div>
+
+    <div id="recommendations" class="recommendations" style="display: none;">
+        <h3>🎯 Recommendations</h3>
+        <ul id="recommendations-list">
+            <!-- Recommendations will be populated here -->
+        </ul>
+    </div>
+
+    <script type="module">
+        // Import the LogcatAnalyzer (in a real implementation, this would be a proper ES module import)
+        // For this demo, we'll include a simplified version inline
+        
+        class LogcatAnalyzer {
+            constructor() {
+                this.patterns = new Map([
+                    ['MEDIA_PLAYBACK_ERROR', /MediaPlayer.*error|Codec.*not supported|Video.*failed/i],
+                    ['WEBVIEW_CRASH', /WebView.*crash|Chromium.*crash|RenderProcessGone/i],
+                    ['DISPLAY_ISSUE', /Display.*disconnected|Resolution.*changed|HDMI.*error/i],
+                    ['NETWORK_CONNECTIVITY', /NetworkInfo.*DISCONNECTED|WiFi.*lost|Ethernet.*down/i],
+                    ['STORAGE_CORRUPTION', /SQLite.*corrupt|Database.*malformed|File.*corrupted/i]
+                ]);
+                
+                this.crashPatterns = new Map([
+                    ['ANR', /ANR in|Application Not Responding/i],
+                    ['CRASH', /FATAL EXCEPTION|AndroidRuntime.*FATAL/i],
+                    ['NATIVE_CRASH', /\*\*\* FATAL EXCEPTION IN NATIVE CODE|signal \d+ \(SIG/i],
+                    ['WATCHDOG', /WATCHDOG KILLING SYSTEM PROCESS/i]
+                ]);
+            }
+
+            parseLogLine(line) {
+                const match = line.match(/^(\d{2}-\d{2}\s\d{2}:\d{2}:\d{2}\.\d{3})\s+(\d+)\s+(\d+)\s+([VDIWEF])\s+([^:]+):\s*(.*)$/);
+                if (match) {
+                    const [, timestamp, pid, tid, level, tag, message] = match;
+                    return {
+                        timestamp,
+                        pid: parseInt(pid),
+                        tid: parseInt(tid),
+                        level,
+                        tag: tag.trim(),
+                        message: message.trim(),
+                        raw: line
+                    };
+                }
+                return null;
+            }
+
+            analyzeLogEntries(entries) {
+                const crashes = this.detectCrashes(entries);
+                const performance = this.analyzePerformance(entries);
+                const patterns = this.findPatterns(entries);
+                const recommendations = this.generateRecommendations(crashes, performance, patterns);
+
+                return {
+                    summary: {
+                        totalLines: entries.length,
+                        timeRange: {
+                            start: entries[0]?.timestamp || '',
+                            end: entries[entries.length - 1]?.timestamp || ''
+                        },
+                        errorCount: entries.filter(e => e.level === 'E').length,
+                        warningCount: entries.filter(e => e.level === 'W').length,
+                        crashCount: crashes.length
+                    },
+                    crashes,
+                    performance,
+                    patterns,
+                    recommendations
+                };
+            }
+
+            detectCrashes(entries) {
+                const crashes = [];
+                let currentCrash = null;
+                let stackTrace = [];
+
+                for (const entry of entries) {
+                    for (const [type, pattern] of this.crashPatterns) {
+                        if (pattern.test(entry.message)) {
+                            if (currentCrash) {
+                                crashes.push({...currentCrash, stackTrace: [...stackTrace]});
+                            }
+                            currentCrash = {
+                                type,
+                                timestamp: entry.timestamp,
+                                process: entry.tag,
+                                severity: type === 'ANR' || entry.message.includes('FATAL') ? 'CRITICAL' : 'HIGH',
+                                category: this.categorizeCrash(entry.message),
+                                suggestions: this.generateCrashSuggestions(type, entry.message)
+                            };
+                            stackTrace = [entry.message];
+                            break;
+                        }
+                    }
+
+                    if (currentCrash && (entry.message.includes('at ') || entry.message.includes('Caused by:') || entry.level === 'E')) {
+                        stackTrace.push(entry.message);
+                    }
+                }
+
+                if (currentCrash) {
+                    crashes.push({...currentCrash, stackTrace: [...stackTrace]});
+                }
+
+                return crashes;
+            }
+
+            categorizeCrash(message) {
+                if (message.includes('MediaPlayer') || message.includes('Video')) return 'Media Playback';
+                if (message.includes('WebView') || message.includes('Chromium')) return 'WebView/Browser';
+                if (message.includes('Network') || message.includes('Socket')) return 'Network';
+                if (message.includes('SQLite') || message.includes('Database')) return 'Database';
+                if (message.includes('OutOfMemoryError')) return 'Memory Management';
+                return 'General';
+            }
+
+            generateCrashSuggestions(type, message) {
+                const suggestions = [];
+                if (type === 'ANR') {
+                    suggestions.push('Check for blocking operations on the main thread');
+                    suggestions.push('Use AsyncTask or background threads for heavy operations');
+                }
+                if (message.includes('NullPointerException')) {
+                    suggestions.push('Add null checks before accessing objects');
+                }
+                if (message.includes('OutOfMemoryError')) {
+                    suggestions.push('Optimize image loading and caching');
+                }
+                return suggestions;
+            }
+
+            analyzePerformance(entries) {
+                const metrics = [];
+                for (const entry of entries) {
+                    const memoryMatch = entry.message.match(/GC_.*freed (\d+).*(\d+)K->(\d+)K/i);
+                    if (memoryMatch) {
+                        const afterGC = parseInt(memoryMatch[3]);
+                        metrics.push({
+                            type: 'MEMORY',
+                            timestamp: entry.timestamp,
+                            value: afterGC,
+                            unit: 'KB',
+                            status: afterGC > 100000 ? 'WARNING' : 'NORMAL'
+                        });
+                    }
+                }
+                return metrics;
+            }
+
+            findPatterns(entries) {
+                const patternMatches = [];
+                for (const [patternName, regex] of this.patterns) {
+                    const matches = entries.filter(entry => regex.test(entry.message));
+                    if (matches.length > 0) {
+                        patternMatches.push({
+                            pattern: patternName,
+                            matches,
+                            severity: patternName.includes('ERROR') ? 'ERROR' : 'WARNING',
+                            description: this.getPatternDescription(patternName)
+                        });
+                    }
+                }
+                return patternMatches;
+            }
+
+            getPatternDescription(patternName) {
+                const descriptions = {
+                    'MEDIA_PLAYBACK_ERROR': 'Issues with media file playback, codec support, or video rendering',
+                    'WEBVIEW_CRASH': 'WebView or Chromium browser engine crashes affecting web content',
+                    'DISPLAY_ISSUE': 'Display connectivity or resolution problems',
+                    'NETWORK_CONNECTIVITY': 'Network connection issues affecting content delivery',
+                    'STORAGE_CORRUPTION': 'Database or file system corruption issues'
+                };
+                return descriptions[patternName] || 'Pattern detected in logs';
+            }
+
+            generateRecommendations(crashes, performance, patterns) {
+                const recommendations = [];
+                if (crashes.length > 0) {
+                    recommendations.push(`Found ${crashes.length} crash(es). Review crash reports for immediate fixes.`);
+                }
+                if (performance.some(p => p.status !== 'NORMAL')) {
+                    recommendations.push('Performance issues detected. Consider optimizing memory usage.');
+                }
+                if (patterns.some(p => p.severity === 'ERROR')) {
+                    recommendations.push('Critical patterns detected. Address error conditions immediately.');
+                }
+                return recommendations;
+            }
+        }
+
+        // Initialize analyzer and UI elements
+        const analyzer = new LogcatAnalyzer();
+        const elements = {
+            logcatInput: document.getElementById('logcat-input'),
+            analyzeBtn: document.getElementById('analyze-btn'),
+            clearBtn: document.getElementById('clear-btn'),
+            exportBtn: document.getElementById('export-btn'),
+            fileInput: document.getElementById('file-input'),
+            loadFileBtn: document.getElementById('load-file-btn'),
+            filterLevel: document.getElementById('filter-level'),
+            filterTag: document.getElementById('filter-tag'),
+            analysisResults: document.getElementById('analysis-results'),
+            summaryContent: document.getElementById('summary-content'),
+            crashesContent: document.getElementById('crashes-content'),
+            performanceContent: document.getElementById('performance-content'),
+            patternsContent: document.getElementById('patterns-content'),
+            recommendations: document.getElementById('recommendations'),
+            recommendationsList: document.getElementById('recommendations-list'),
+            crashCount: document.getElementById('crash-count'),
+            metricCount: document.getElementById('metric-count'),
+            patternCount: document.getElementById('pattern-count'),
+            analysisTime: document.getElementById('analysis-time')
+        };
+
+        let currentToolId = '';
+        let lastAnalysisResult = null;
+
+        function saveState() {
+            if (currentToolId) {
+                const state = {
+                    logInput: elements.logcatInput.value,
+                    lastAnalysisResult: lastAnalysisResult,
+                    filterLevel: elements.filterLevel.value,
+                    filterTag: elements.filterTag.value
+                };
+                localStorage.setItem(`tool-state-${currentToolId}`, JSON.stringify(state));
+            }
+        }
+
+        function loadState() {
+            if (currentToolId) {
+                const savedState = localStorage.getItem(`tool-state-${currentToolId}`);
+                if (savedState) {
+                    const state = JSON.parse(savedState);
+                    elements.logcatInput.value = state.logInput || '';
+                    elements.filterLevel.value = state.filterLevel || '';
+                    elements.filterTag.value = state.filterTag || '';
+                    if (state.lastAnalysisResult) {
+                        lastAnalysisResult = state.lastAnalysisResult;
+                        displayAnalysisResults(lastAnalysisResult);
+                    }
+                }
+            }
+        }
+
+        elements.analyzeBtn.addEventListener('click', () => {
+            const input = elements.logcatInput.value.trim();
+            if (!input) {
+                alert('Please paste some logcat output to analyze.');
+                return;
+            }
+
+            const startTime = Date.now();
+            elements.analysisResults.style.display = 'none';
+            elements.recommendations.style.display = 'none';
+
+            // Show loading state
+            elements.analysisResults.style.display = 'grid';
+            elements.summaryContent.innerHTML = '<div class="loading">Analyzing logs...</div>';
+
+            setTimeout(() => {
+                const lines = input.split('\n').filter(line => line.trim());
+                const entries = lines.map(line => analyzer.parseLogLine(line)).filter(entry => entry !== null);
+                
+                if (entries.length === 0) {
+                    elements.summaryContent.innerHTML = '<div class="loading">No valid log entries found. Please check the format.</div>';
+                    return;
+                }
+
+                const result = analyzer.analyzeLogEntries(entries);
+                const analysisTime = Date.now() - startTime;
+                
+                lastAnalysisResult = result;
+                displayAnalysisResults(result);
+                elements.analysisTime.textContent = `${analysisTime}ms`;
+                elements.exportBtn.style.display = 'inline-block';
+                saveState();
+            }, 100);
+        });
+
+        function displayAnalysisResults(result) {
+            // Display summary
+            elements.summaryContent.innerHTML = `
+                <div class="summary-item">
+                    <div class="summary-value">${result.summary.totalLines}</div>
+                    <div class="summary-label">Total Lines</div>
+                </div>
+                <div class="summary-item">
+                    <div class="summary-value">${result.summary.errorCount}</div>
+                    <div class="summary-label">Errors</div>
+                </div>
+                <div class="summary-item">
+                    <div class="summary-value">${result.summary.warningCount}</div>
+                    <div class="summary-label">Warnings</div>
+                </div>
+                <div class="summary-item">
+                    <div class="summary-value">${result.summary.crashCount}</div>
+                    <div class="summary-label">Crashes</div>
+                </div>
+            `;
+
+            // Display crashes
+            elements.crashCount.textContent = result.crashes.length;
+            if (result.crashes.length === 0) {
+                elements.crashesContent.innerHTML = '<div class="loading">No crashes detected ✅</div>';
+            } else {
+                elements.crashesContent.innerHTML = result.crashes.map(crash => `
+                    <div class="crash-item crash-${crash.severity.toLowerCase()}">
+                        <strong>${crash.type}</strong>
+                        <span class="badge badge-${crash.severity.toLowerCase()}">${crash.severity}</span>
+                        <div style="margin-top: 8px;">
+                            <strong>Process:</strong> ${crash.process}<br>
+                            <strong>Time:</strong> ${crash.timestamp}<br>
+                            <strong>Category:</strong> ${crash.category}
+                        </div>
+                        ${crash.stackTrace.length > 0 ? `
+                            <div class="stack-trace">${crash.stackTrace.slice(0, 5).join('\n')}${crash.stackTrace.length > 5 ? '\n...' : ''}</div>
+                        ` : ''}
+                        ${crash.suggestions.length > 0 ? `
+                            <div style="margin-top: 8px;"><strong>Suggestions:</strong>
+                                <ul>${crash.suggestions.map(s => `<li>${s}</li>`).join('')}</ul>
+                            </div>
+                        ` : ''}
+                    </div>
+                `).join('');
+            }
+
+            // Display performance metrics
+            elements.metricCount.textContent = result.performance.length;
+            if (result.performance.length === 0) {
+                elements.performanceContent.innerHTML = '<div class="loading">No performance metrics found</div>';
+            } else {
+                elements.performanceContent.innerHTML = result.performance.map(metric => `
+                    <div class="metric-item metric-${metric.status.toLowerCase()}">
+                        <strong>${metric.type}</strong>
+                        <span class="badge badge-${metric.status.toLowerCase()}">${metric.status}</span>
+                        <div style="margin-top: 8px;">
+                            <strong>Value:</strong> ${metric.value} ${metric.unit}<br>
+                            <strong>Time:</strong> ${metric.timestamp}
+                        </div>
+                    </div>
+                `).join('');
+            }
+
+            // Display patterns
+            elements.patternCount.textContent = result.patterns.length;
+            if (result.patterns.length === 0) {
+                elements.patternsContent.innerHTML = '<div class="loading">No significant patterns detected</div>';
+            } else {
+                elements.patternsContent.innerHTML = result.patterns.map(pattern => `
+                    <div class="pattern-item pattern-${pattern.severity.toLowerCase()}">
+                        <strong>${pattern.pattern.replace(/_/g, ' ')}</strong>
+                        <span class="badge badge-${pattern.severity.toLowerCase()}">${pattern.severity}</span>
+                        <div style="margin-top: 8px;">
+                            <strong>Occurrences:</strong> ${pattern.matches.length}<br>
+                            <strong>Description:</strong> ${pattern.description}
+                        </div>
+                    </div>
+                `).join('');
+            }
+
+            // Display recommendations
+            if (result.recommendations.length > 0) {
+                elements.recommendations.style.display = 'block';
+                elements.recommendationsList.innerHTML = result.recommendations.map(rec => `<li>${rec}</li>`).join('');
+            }
+
+            elements.analysisResults.style.display = 'grid';
+        }
+
+        elements.clearBtn.addEventListener('click', () => {
+            elements.logcatInput.value = '';
+            elements.analysisResults.style.display = 'none';
+            elements.recommendations.style.display = 'none';
+            elements.exportBtn.style.display = 'none';
+            lastAnalysisResult = null;
+            saveState();
+        });
+
+        elements.loadFileBtn.addEventListener('click', () => {
+            elements.fileInput.click();
+        });
+
+        elements.fileInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    elements.logcatInput.value = e.target.result;
+                    saveState();
+                };
+                reader.readAsText(file);
+            }
+        });
+
+        elements.exportBtn.addEventListener('click', () => {
+            if (!lastAnalysisResult) return;
+
+            const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+            const filename = `logcat-analysis-${timestamp}.json`;
+            
+            const exportData = {
+                timestamp: new Date().toISOString(),
+                analysis: lastAnalysisResult,
+                metadata: {
+                    tool: 'Advanced Logcat Analyzer',
+                    version: '1.0.0'
+                }
+            };
+
+            const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        });
+
+        elements.logcatInput.addEventListener('input', saveState);
+        elements.filterLevel.addEventListener('change', saveState);
+        elements.filterTag.addEventListener('input', saveState);
+
+        // Apply theme and receive toolId from parent
+        window.addEventListener('message', (event) => {
+            if (event.data.type === 'themeChange') {
+                document.documentElement.setAttribute('data-theme', event.data.theme);
+            } else if (event.data.type === 'toolId') {
+                currentToolId = event.data.toolId;
+                loadState();
+            }
+        });
+
+        window.parent.postMessage({ type: 'requestTheme' }, '*');
+        window.parent.postMessage({ type: 'requestToolId' }, '*');
+    </script>
+</body>
+</html>

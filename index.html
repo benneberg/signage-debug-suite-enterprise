@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <link rel="icon" type="image/svg+xml" href="/vite.svg">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Signage DevHub</title>
+    <link rel="stylesheet" href="/styles/main.css">
+    <link rel="manifest" href="/manifest.json"> <!-- PWA Manifest -->
+</head>
+<body>
+    <div id="app">
+        <header class="app-header">
+            <div class="logo">Signage DevHub 🔧</div>
+            <nav class="tool-selector">
+                <select id="tool-select">
+                    <option value="">Select a Tool</option>
+                    <option value="logcat-parser">Logcat Parser/Analyzer</option>
+                    <option value="indexeddb-manager">IndexedDB Manager</option>
+                    <option value="media-metadata-editor">Media Metadata Editor</option>
+                    <!-- More tools will be added here -->
+                </select>
+            </nav>
+            <div class="header-actions">
+                <input type="search" id="search-tools" placeholder="Search tools...">
+                <button id="pin-to-home-btn" title="Pin to Home Screen">📌</button>
+                <button id="dark-mode-toggle" title="Toggle Dark Mode">💡</button>
+                <button id="settings-toggle" title="Settings">⚙️</button>
+            </div>
+        </header>
+
+        <div class="pinned-tools-container" id="pinned-tools-container">
+            <h3>Pinned Tools:</h3>
+            <div id="pinned-tools-list" class="pinned-tools-list">
+                <!-- Pinned tools will be rendered here -->
+                <span class="no-pinned-tools">No tools pinned yet.</span>
+            </div>
+        </div>
+
+        <main id="main-content" class="main-content">
+            <div class="welcome-message">
+                <h2>Welcome to Signage DevHub!</h2>
+                <p>Select a tool from the dropdown above to get started.</p>
+                <p>This dashboard is designed to simplify debugging for Android-based digital signage players.</p>
+            </div>
+            <!-- Tools will be loaded here, potentially in iframes -->
+        </main>
+
+        <div id="settings-panel" class="settings-panel">
+            <h3>Settings</h3>
+            <div class="setting-item">
+                <label for="ai-assistant-toggle">AI Assistant:</label>
+                <input type="checkbox" id="ai-assistant-toggle">
+            </div>
+            <div class="setting-item">
+                <label for="privacy-mode-toggle">Privacy Mode (No External APIs):</label>
+                <input type="checkbox" id="privacy-mode-toggle">
+            </div>
+            <div class="setting-item">
+                <label for="role-selector">Role:</label>
+                <select id="role-selector">
+                    <option value="dev">Developer</option>
+                    <option value="qc">QC Engineer</option>
+                    <option value="ux">UX Designer</option>
+                </select>
+            </div>
+            <button id="close-settings">Close</button>
+        </div>
+    </div>
+    <script type="module" src="/main.ts"></script>
+</body>
+</html>

@@ -1,0 +1,69 @@
+{
+  "name": "Signage DevHub - Developer Toolkit",
+  "short_name": "DevHub",
+  "description": "A comprehensive modular developer tool suite for debugging Android-based digital signage players. Features logcat analysis, IndexedDB management, media metadata editing, and AI-powered log analysis.",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#f4f7f6",
+  "theme_color": "#007bff",
+  "categories": ["developer", "productivity", "utilities"],
+  "lang": "en",
+  "scope": "/",
+  "icons": [
+    {
+      "src": "/icons/icon-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icons/icon-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "screenshots": [
+    {
+      "src": "/screenshots/desktop-screenshot.png",
+      "sizes": "1280x720",
+      "type": "image/png",
+      "form_factor": "wide",
+      "label": "Signage DevHub Dashboard on Desktop"
+    },
+    {
+      "src": "/screenshots/mobile-screenshot.png",
+      "sizes": "390x844",
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "Signage DevHub Dashboard on Mobile"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Logcat Analyzer",
+      "short_name": "Logcat",
+      "description": "Quickly analyze Android logcat output",
+      "url": "/?tool=logcat-parser",
+      "icons": [
+        {
+          "src": "/icons/icon-192x192.png",
+          "sizes": "192x192"
+        }
+      ]
+    },
+    {
+      "name": "IndexedDB Manager",
+      "short_name": "IndexedDB",
+      "description": "Inspect and manage IndexedDB databases",
+      "url": "/?tool=indexeddb-manager",
+      "icons": [
+        {
+          "src": "/icons/icon-192x192.png",
+          "sizes": "192x192"
+        }
+      ]
+    }
+  ]
+}

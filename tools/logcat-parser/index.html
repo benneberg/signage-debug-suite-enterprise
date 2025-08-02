@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Logcat Parser/Analyzer</title>
+    <style>
+        body { font-family: sans-serif; padding: 20px; background-color: var(--bg-color); color: var(--text-color); }
+        h2 { color: var(--text-color); margin-bottom: 15px; }
+        p { margin-bottom: 10px; }
+        textarea { width: 100%; height: 200px; padding: 10px; border: 1px solid var(--border-color); background-color: var(--input-bg); color: var(--text-color); border-radius: 5px; resize: vertical; }
+        button { background-color: var(--button-bg); color: var(--button-text); border: none; padding: 10px 15px; border-radius: 5px; cursor: pointer; margin-top: 10px; }
+        .output { margin-top: 20px; padding: 15px; border: 1px solid var(--border-color); background-color: var(--input-bg); border-radius: 5px; min-height: 100px; }
+    </style>
+</head>
+<body>
+    <h2>Logcat Parser/Analyzer</h2>
+    <p>Paste your logcat output here to analyze it.</p>
+    <textarea id="logcat-input" placeholder="Paste logcat lines..."></textarea>
+    <button id="analyze-btn">Analyze Logs</button>
+    <div class="output" id="analysis-output">
+        Analysis results will appear here.
+    </div>
+
+    <script>
+        const logcatInput = document.getElementById('logcat-input');
+        const analyzeBtn = document.getElementById('analyze-btn');
+        const analysisOutput = document.getElementById('analysis-output');
+        let currentToolId = '';
+
+        function saveState() {
+            if (currentToolId) {
+                const state = {
+                    logInput: logcatInput.value,
+                    outputContent: analysisOutput.innerHTML
+                };
+                localStorage.setItem(`tool-state-${currentToolId}`, JSON.stringify(state));
+            }
+        }
+
+        function loadState() {
+            if (currentToolId) {
+                const savedState = localStorage.getItem(`tool-state-${currentToolId}`);
+                if (savedState) {
+                    const state = JSON.parse(savedState);
+                    logcatInput.value = state.logInput || '';
+                    analysisOutput.innerHTML = state.outputContent || 'Analysis results will appear here.';
+                }
+            }
+        }
+
+        analyzeBtn.addEventListener('click', () => {
+            const input = logcatInput.value.trim();
+            if (input === '') {
+                analysisOutput.textContent = 'Please paste some logs to analyze.';
+                return;
+            }
+            // Simple mock analysis for now
+            const lines = input.split('\n').filter(line => line.trim() !== '');
+            let errorCount = 0;
+            let warningCount = 0;
+            lines.forEach(line => {
+                if (line.includes(' E/')) errorCount++;
+                if (line.includes(' W/')) warningCount++;
+            });
+            analysisOutput.textContent = `Analyzed ${lines.length} lines:\n`;
+            analysisOutput.textContent += `Errors: ${errorCount}\n`;
+            analysisOutput.textContent += `Warnings: ${warningCount}\n`;
+            analysisOutput.textContent += `(More sophisticated analysis coming soon!)`;
+            saveState(); // Save state after analysis
+        });
+
+        logcatInput.addEventListener('input', saveState); // Save state on input change
+
+        // Apply theme and receive toolId from parent
+        window.addEventListener('message', (event) => {
+            if (event.data.type === 'themeChange') {
+                document.documentElement.setAttribute('data-theme', event.data.theme);
+            } else if (event.data.type === 'toolId') {
+                currentToolId = event.data.toolId;
+                loadState(); // Load state once toolId is received
+            }
+        });
+        // Request initial theme and toolId on load
+        window.parent.postMessage({ type: 'requestTheme' }, '*');
+        window.parent.postMessage({ type: 'requestToolId' }, '*'); // Request toolId from parent
+    </script>
+</body>
+</html>

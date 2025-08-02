@@ -1,0 +1,17 @@
+{
+  "name": "ai-log-analyzer",
+  "version": "1.0.0",
+  "description": "An AI-powered log analyzer using the AI SDK.",
+  "main": "analyze-logs.js",
+  "scripts": {
+    "start": "node analyze-logs.js"
+  },
+  "keywords": ["ai", "logs", "analyzer", "openai", "ai-sdk"],
+  "author": "v0",
+  "license": "MIT",
+  "dependencies": {
+    "@ai-sdk/openai": "^0.1.18",
+    "ai": "^3.2.32"
+  },
+  "type": "module"
+}
